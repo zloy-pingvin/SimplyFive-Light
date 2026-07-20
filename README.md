@@ -9,7 +9,7 @@ own; a separate **Pro** version adds fine-grained per-LOD control and extra
 transfer options (see *Pro version* below).
 
 Author: zloy_pingvin
-Requires Blender: 5.2.0+
+Requires Blender: 5.0.0+ (may also work on 3.0.0+, but not thoroughly tested)
 
 
 ## Features (Light)
@@ -23,6 +23,8 @@ Requires Blender: 5.2.0+
 - Vertex colors carried onto the LODs, and optionally used as a per-vertex
   **importance map** (paint areas you want to keep more detailed) — one
   global switch applied to every level.
+- Multiple UV channels: carry every UV channel onto the LODs, not just the
+  active one.
 - Multi-material support, including materials on linked duplicates/instances
   or produced by Geometry Nodes.
 - Merge by Distance on the result to weld seams cleanly.
@@ -33,18 +35,17 @@ Requires Blender: 5.2.0+
 
 ## Pro version
 
+<https://zloy-pingvin.github.io/SimplyFive-Light/>
+
 The Pro version keeps everything in Light and adds:
 
 - Full per-level fine-tuning of every simplification parameter.
 - Chained LODs — build each level from the previous one for cleaner far LODs.
-- Multiple UV channels transfer (not just the active one).
 - Vertex color **hard-lock**: guarantee important areas are never simplified.
 - Recalculate normals + Auto Smooth by angle for very low-poly levels.
 - An extra topology-ignoring ultra-aggressive mode, and a "regularize" pass
   for more uniform triangles.
 - Save and load full configurations as named presets.
-
-*(availability and purchase link — coming soon.)*
 
 ## Installation
 
@@ -71,6 +72,8 @@ The source object is renamed to "name_lod_0", and "name_lod_1",
 configurable in Preferences). The "LOD Preview (distance)" slider inspects
 each level individually, and the icon button next to it ("Line Up LODs")
 lays every generated level out in a row for side-by-side comparison.
+
+Full documentation: <https://zloy-pingvin.github.io/SimplyFive-Light/docs.html>
 
 ## License
 
