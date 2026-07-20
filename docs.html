@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimplyFive — User Manual</title>
+<style>
+  :root{
+    --bg:#0f1319; --surface:#191f29; --line:#2a3140; --line-soft:#222a37;
+    --text:#d9dee7; --text-dim:#8a92a2; --accent:#2f7ff2; --accent-2:#35c6ff;
+    --accent-ink:#04101f; --warn:#e0a030; --good:#3ec98a;
+    --maxw:900px; --radius:14px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#f2f5f9;--surface:#ffffff;--line:#dbe1ea;--line-soft:#e6ebf2;
+      --text:#14203a;--text-dim:#56617a;--accent:#1f6fe0;--accent-2:#109fdc;--accent-ink:#fff;}
+  }
+  :root[data-theme="dark"]{--bg:#0f1319;--surface:#191f29;--line:#2a3140;--line-soft:#222a37;
+    --text:#d9dee7;--text-dim:#8a92a2;--accent:#2f7ff2;--accent-2:#35c6ff;--accent-ink:#04101f;}
+  :root[data-theme="light"]{--bg:#f2f5f9;--surface:#ffffff;--line:#dbe1ea;--line-soft:#e6ebf2;
+    --text:#14203a;--text-dim:#56617a;--accent:#1f6fe0;--accent-2:#109fdc;--accent-ink:#fff;}
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px 120px;}
+
+  /* top bar */
+  header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+  .top-in{max-width:var(--maxw);margin:0 auto;padding:12px 20px;display:flex;gap:16px;
+    align-items:center;flex-wrap:wrap;}
+  .brand{font-weight:700;letter-spacing:.2px;font-size:1.05rem;}
+  .brand small{color:var(--text-dim);font-weight:500;}
+  .spacer{flex:1;}
+  .edition{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--text-dim);}
+  select#edition{font:inherit;font-size:.92rem;color:var(--text);background:var(--surface);
+    border:1px solid var(--line);border-radius:9px;padding:6px 10px;cursor:pointer;}
+  select#edition:focus{outline:2px solid var(--accent);outline-offset:1px;}
+
+  /* hero */
+  .hero{padding:40px 0 8px;border-bottom:1px solid var(--line-soft);margin-bottom:8px;}
+  .hero h1{font-size:clamp(1.8rem,1.2rem+2.5vw,2.6rem);margin:.2em 0 .1em;line-height:1.15;}
+  .hero p.lead{color:var(--text-dim);font-size:1.05rem;max-width:66ch;margin:.4em 0 0;}
+  .editnote{margin:16px 0 0;font-size:.86rem;color:var(--text-dim);
+    border-left:3px solid var(--accent);padding:6px 0 6px 12px;}
+
+  h2{font-size:1.5rem;margin:2.2em 0 .3em;padding-top:.4em;scroll-margin-top:70px;}
+  h3{font-size:1.12rem;margin:1.6em 0 .2em;color:var(--text);}
+  h2 .num{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:.35em;}
+  p{margin:.6em 0;}
+  a{color:var(--accent);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  ul,ol{margin:.5em 0 .9em;padding-left:1.3em;}
+  li{margin:.28em 0;}
+  code,kbd{font-family:var(--mono);font-size:.88em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:.06em .4em;}
+  kbd{box-shadow:0 1px 0 var(--line);}
+
+  .tip,.warn,.note{border-radius:var(--radius);padding:12px 16px;margin:1em 0;
+    border:1px solid var(--line);background:var(--surface);font-size:.95rem;}
+  .tip{border-left:4px solid var(--good);}
+  .warn{border-left:4px solid var(--warn);}
+  .note{border-left:4px solid var(--accent);}
+  .tip b,.warn b,.note b{color:var(--text);}
+
+  table{width:100%;border-collapse:collapse;margin:1em 0;font-size:.94rem;display:block;overflow-x:auto;}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top;}
+  th{background:var(--surface);font-weight:600;}
+  td b{color:var(--text);}
+
+  figure.ph{margin:1em 0;border:1px dashed var(--line);border-radius:var(--radius);
+    padding:18px;color:var(--text-dim);font-size:.85rem;background:
+    repeating-linear-gradient(45deg,transparent,transparent 10px,var(--line-soft) 10px,var(--line-soft) 11px);
+    text-align:center;}
+  figure.ph::before{content:"🖼  ";}
+
+  /* Pro tier tagging */
+  .badge-pro{display:inline-block;font:600 .62rem/1 var(--mono);letter-spacing:.06em;
+    color:var(--accent-ink);background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    border-radius:6px;padding:3px 6px;vertical-align:middle;margin-left:.5em;text-transform:uppercase;}
+  [data-tier="pro"]{scroll-margin-top:70px;}
+  /* Light edition hides everything Pro-only; Pro hides any Light-only notes */
+  body[data-edition="light"] [data-tier="pro"]{display:none !important;}
+  body[data-edition="pro"] [data-tier="light"]{display:none !important;}
+
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);
+    color:var(--text-dim);font-size:.85rem;}
+</style>
+</head>
+<body data-edition="light">
+
+<header class="top">
+  <div class="top-in">
+    <span class="brand">SimplyFive <small>· User Manual</small></span>
+    <span class="spacer"></span>
+    <label class="edition">Edition:
+      <select id="edition" aria-label="Documentation edition">
+        <option value="light" selected>Light (free)</option>
+        <option value="pro">Pro</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>SimplyFive — One-click LOD Generator</h1>
+    <p class="lead">A Blender add-on that generates a set of LOD meshes (Levels of Detail)
+      from the active object, using the meshoptimizer library. For each mesh you can create
+      up to 5 simplified versions with individual aggressiveness; simplification can take UV
+      unwrapping, normals, vertex colors (as an importance map) and materials into account.</p>
+    <p class="editnote" id="editnote"></p>
+  </section>
+
+  <h2><span class="num">1.</span>What the add-on does</h2>
+  <p>SimplyFive creates several simplified copies of your model in one click (LOD — Level of
+    Detail): the farther an object is from the camera in a game or scene, the fewer polygons it
+    needs. The add-on figures out on its own how to remove the “extra” triangles so that the
+    silhouette, textures and shading suffer as little as possible.</p>
+  <figure class="ph">One model shown with 4 levels of detail side by side — from detailed to simple.</figure>
+
+  <h2><span class="num">2.</span>Installing the add-on</h2>
+  <ol>
+    <li>Open Blender → <b>Edit → Preferences → Add-ons</b>.</li>
+    <li>Click <b>“Install...”</b> and select the SimplyFive folder/archive.</li>
+    <li>Enable the checkbox next to the add-on in the list.</li>
+  </ol>
+  <figure class="ph">Preferences → Add-ons window with SimplyFive found and enabled.</figure>
+
+  <h3>2.1 The meshoptimizer library</h3>
+  <p>The add-on uses the third-party <b>meshoptimizer</b> library, which does the actual geometry
+    simplification. It is already bundled inside the add-on — no extra steps are needed, the
+    generation buttons work right after installation. You can open the add-on’s Preferences to
+    confirm the library status reads <b>ready</b>.</p>
+  <figure class="ph">Add-on Preferences showing the library “ready” status.</figure>
+  <p data-tier="pro"><span class="badge-pro">Pro</span> <b>Tip:</b> Pro can also rebuild the library
+    from source (e.g. to pull a newer meshoptimizer) with a button in Preferences — see Appendix A.
+    Light always ships and loads the bundled library only.</p>
+
+  <h2><span class="num">3.</span>Where to find the add-on panel</h2>
+  <ol>
+    <li>Select the mesh object you want to simplify in the 3D viewport.</li>
+    <li>Open the sidebar with the <kbd>N</kbd> key.</li>
+    <li>Find the <b>“LODs”</b> tab on the right
+      (<span data-tier="pro"><span class="badge-pro">Pro</span> </span><span data-tier="pro">the Pro tab is “LODs”; </span>the Light tab is <b>“LODsLight”</b>).</li>
+  </ol>
+  <p>At the top of the panel you’ll see the selected object’s name and its current
+    triangle / vertex count.</p>
+  <figure class="ph">Viewport with the sidebar open, arrow pointing to the LODs tab.</figure>
+
+  <h2><span class="num">4.</span>Creating LODs in 5 steps</h2>
+  <ol>
+    <li>Select the model (best to work with final, finished geometry).</li>
+    <li>In <b>“Number of LODs”</b>, set how many levels you need (3–4 is usually enough).</li>
+    <li>For each level, pick a <b>Mode</b> from the dropdown: the farther the level is from “0”,
+      the more aggressive the mode should be (see the table in section 5).</li>
+    <li>Optionally adjust the triangle percentage (<b>%</b>) for each level.</li>
+    <li>Click the big <b>“Generate LODs”</b> button at the bottom.</li>
+  </ol>
+  <figure class="ph">Filled-in LODs panel right before clicking Generate LODs.</figure>
+  <p>After generation, new objects appear: your original is renamed to <code>name_lod_0</code>,
+    and <code>name_lod_1</code>, <code>name_lod_2</code>, … appear next to it — one per level.</p>
+  <div class="warn"><b>Important:</b> Running generation again for the same object deletes and
+    recreates old LOD objects with the same names — previous versions are not kept.</div>
+
+  <h2><span class="num">5.</span>Which mode to choose for which level</h2>
+  <p>Each LOD level has a <b>“Mode”</b> dropdown with ready-made settings. You don’t need to
+    understand every parameter — just go by how far this level will be from the camera:</p>
+  <table>
+    <thead><tr><th>Level (by distance)</th><th>Mode</th><th>When to use it</th></tr></thead>
+    <tbody>
+      <tr><td>Closest (LOD1)</td><td><b>Careful</b></td><td>Nearly identical to the original — for close-ups / short distances.</td></tr>
+      <tr><td>Medium (LOD2–3)</td><td><b>Standard</b></td><td>A good balance of quality and polygon count — the “workhorse”.</td></tr>
+      <tr><td>Far (LOD4)</td><td><b>Aggressive</b></td><td>Noticeably fewer polygons; slight texture distortion is acceptable.</td></tr>
+      <tr><td>Very far (LOD5)</td><td><b>Very Aggressive</b><span data-tier="pro"> / Clear Simplify</span></td><td>Seen small or from afar — only the silhouette shape matters.</td></tr>
+    </tbody>
+  </table>
+  <div class="tip"><b>Tip:</b> If the model looks “broken” after simplification (holes, textures
+    gone haywire) — switch to a gentler mode for that level, or raise the percentage (bring
+    <b>%</b> closer to 100).</div>
+  <p data-tier="pro"><span class="badge-pro">Pro</span> For finer control, expand <b>“Details”</b>
+    under the mode — that’s where all the individual parameters live (section 7). In Light the
+    modes are fixed presets and the Details block is not editable.</p>
+
+  <h2><span class="num">6.</span>General options (below the level list)</h2>
+  <p>These apply to the whole generation, not to a single level.</p>
+  <table>
+    <thead><tr><th>Option</th><th>What it does and when to enable it</th></tr></thead>
+    <tbody>
+      <tr><td><b>Error Absolute</b><br><span style="color:var(--text-dim)">(for multiple materials)</span></td>
+        <td>Switches the meaning of Target Error from “a fraction of the model’s size” to “an
+        absolute distance”. Especially useful when the model has several materials: without it,
+        parts with different materials can simplify unevenly. Turn it on if you notice that
+        imbalance.</td></tr>
+      <tr><td><b>Merge by Distance</b></td>
+        <td>Welds together vertices that ended up at exactly the same point after simplification
+        (Blender’s own tool). Keep this on — it cleans up the result without harming
+        textures / seams.</td></tr>
+      <tr><td><b>Merge Threshold</b></td>
+        <td>The welding threshold above. Keep it small (the default is usually fine) — a large
+        value can weld together thin parts meant to stay separate.</td></tr>
+      <tr><td><b>Multiple UV Channels</b></td>
+        <td>Carries <i>every</i> UV channel of the source onto the LODs (not just the active one),
+        keeping layer names and active/render flags. Off = only the active UV channel is kept.
+        On = geometric quality can drop slightly at the same %, because extra UV seams (e.g.
+        lightmap islands in UV2) constrain simplification.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.1 Vertex colors as an “importance map”</h3>
+  <p>If important areas are painted white (in Vertex Paint mode) and unimportant ones black, the
+    add-on can treat important zones (a face, a logo, a small detail) more carefully and simplify
+    unimportant ones (a back, a sole) more aggressively.</p>
+  <table>
+    <thead><tr><th>Option</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><b>Use Vertex Color as Importance</b></td>
+        <td>Turns the idea on. Reads the active vertex color layer as a per-vertex importance map
+        (luminance: white = important). Applies to every LOD.</td></tr>
+      <tr><td><b>Importance Strength</b></td>
+        <td>How strongly the painting biases the result (0–1). A <i>soft</i> weight: higher =
+        more careful around white zones, but not a full guarantee even at maximum.</td></tr>
+      <tr data-tier="pro"><td><b>Hard-Lock Above Threshold</b> <span class="badge-pro">Pro</span></td>
+        <td>For an actual guarantee: vertices whose importance is above the threshold below are
+        fully protected from collapsing (same hard-lock mechanism as Protect UV Seams).</td></tr>
+      <tr data-tier="pro"><td><b>Lock Threshold</b> <span class="badge-pro">Pro</span></td>
+        <td>The brightness threshold (0–1) for the hard protection above. E.g. 0.9 = only the
+        brightest painted zones get hard-protected.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ================= PRO: per-LOD fine tuning ================= -->
+  <h2 data-tier="pro"><span class="num">7.</span>Fine-tuning each level — the “Details” section <span class="badge-pro">Pro</span></h2>
+  <div data-tier="pro">
+    <p>The built-in modes are enough for most cases. But if something’s off — the model “breaks”,
+      the texture drifts, or too many polygons remain — expand <b>“Details”</b> under that level’s
+      mode and adjust the parameters by hand. Changing any of them switches the mode to
+      <b>“Custom”</b> automatically.</p>
+    <figure class="ph">Expanded Details block of one LOD level with all parameters.</figure>
+
+    <h3>7.1 Target Error — the main parameter</h3>
+    <p>The “allowed error” of simplification — how much the result may differ from the original
+      (by default a fraction of the model’s size, 0–1).</p>
+    <ul>
+      <li><b>Lower</b> → stops earlier and more cautiously; closer to the original, but more
+        triangles than the target % may remain.</li>
+      <li><b>Higher</b> → allowed to cut harder to reach the target %, at the cost of more visible
+        distortion.</li>
+    </ul>
+    <div class="warn"><b>Important:</b> Too high a Target Error can collapse the mesh completely
+      (especially with a low %). If the object caves in or disappears — lower Target Error first.</div>
+
+    <h3>7.2 Shape and mesh boundaries</h3>
+    <table>
+      <thead><tr><th>Parameter</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>Lock Open Edges</b></td><td>Prevents open/boundary edges from being touched. Keep on if the model has open edges you don’t want deformed.</td></tr>
+        <tr><td><b>Sparse</b></td><td>Helps when the model is several disconnected pieces combined into one object.</td></tr>
+        <tr><td><b>Prune (aggressive)</b></td><td>Lets the add-on fully discard small “cheap” disconnected bits. Use when a level won’t drop to the target count due to debris.</td></tr>
+        <tr><td><b>Regularize</b></td><td>Makes result triangles more uniform, at a slight cost to silhouette accuracy. Useful for meshes that get deformed later (rigging, sim).</td></tr>
+      </tbody>
+    </table>
+
+    <h3>7.3 Textures (UV) and shading (normals)</h3>
+    <table>
+      <thead><tr><th>Parameter</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>Permissive (aggressive)</b></td><td>Lets simplification jump over texture seams if it greatly cuts polygons. For far, rough LODs; not for close-ups.</td></tr>
+        <tr><td><b>Protect UV Seams</b></td><td>Only with Permissive: protects seams where the texture clearly differs on either side, cutting “invisible” seams freely.</td></tr>
+        <tr><td><b>Preserve UVs &amp; Normals</b></td><td>The main “smart” toggle: tries not to ruin texture and shading. Turn off only for the farthest/roughest LODs.</td></tr>
+        <tr><td><b>Normal Weight</b></td><td>How strongly shading is protected (0–1). Increase if you see creases/odd highlights; decrease to push polygons lower.</td></tr>
+        <tr><td><b>UV Weight</b></td><td>Same idea for texture coordinates. Increase if the texture drifts/stretches; decrease for far LODs.</td></tr>
+        <tr><td><b>Vertex Update</b></td><td>Slightly moves vertices and texture to fit the new shape. Better results at aggressive levels (LOD3+).</td></tr>
+      </tbody>
+    </table>
+
+    <h3>7.4 Special modes for the farthest LODs</h3>
+    <table>
+      <thead><tr><th>Parameter</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>Pre-prune</b></td><td>A separate pass BEFORE main simplification (threshold 0–0.2) that strips small debris without affecting Target Error accuracy. Start at 0.01–0.05.</td></tr>
+        <tr><td><b>Sloppy (topology-ignoring)</b></td><td>A rough mode for the farthest levels: ignores shape and seams entirely and cuts as much as possible. Vertex Update and the weights have no effect when on.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2><span class="num">8.</span>Checking the result</h2>
+  <p>After generation, every level sits stacked in the scene. To evaluate a specific level:</p>
+  <ul>
+    <li>Move the <b>“LOD Preview (distance)”</b> slider at the top — 0 shows the original, higher
+      values show the corresponding simplified level (others hide automatically).</li>
+    <li>Or click <b>“Only This LOD”</b> next to the level you want; <b>“Show All LODs”</b> makes
+      every level visible again.</li>
+    <li>The <b>“Line Up LODs”</b> button lays every level out in a row (isolated in local view) to
+      compare the progression side by side.</li>
+  </ul>
+  <figure class="ph">The LOD Preview slider and the “Only This LOD” / “Show All LODs” buttons.</figure>
+
+  <h2><span class="num">9.</span>Fixing just one level</h2>
+  <p>You don’t have to recreate everything. Change the settings for the level you want and click
+    <b>“Generate This LOD”</b> in its block — the other levels stay untouched.</p>
+  <figure class="ph">The “Generate This LOD” button on a single level.</figure>
+
+  <!-- ================= PRO: presets ================= -->
+  <h2 data-tier="pro"><span class="num">10.</span>Saving your own settings <span class="badge-pro">Pro</span></h2>
+  <div data-tier="pro">
+    <p>If you’ve worked out a configuration you like (number of levels, percentages, modes, and
+      every Details value), save it as a preset and apply it to other models in one click:</p>
+    <ol>
+      <li>Set up all the LOD levels the way you want.</li>
+      <li>Click the <b>“+”</b> next to the <b>“LOD Presets”</b> dropdown and name the preset.</li>
+      <li>Next time, just pick this preset from the list — every setting is applied instantly.</li>
+    </ol>
+    <p>The <b>“Restore Defaults”</b> button in the same menu resets settings to factory values.</p>
+    <figure class="ph">The LOD Presets menu with + / − buttons and saved presets.</figure>
+  </div>
+
+  <h2><span class="num">11.</span>Frequently asked questions</h2>
+  <table>
+    <thead><tr><th>Question / situation</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td>The “Generate LODs” button is greyed out</td><td>Make sure a mesh object is selected and the library is loaded (section 2.1).</td></tr>
+      <tr data-tier="pro"><td>Preferences shows the library isn’t built <span class="badge-pro">Pro</span></td><td>The bundled library file may have been lost when copying. Build it via Preferences (Appendix A), or reinstall the add-on.</td></tr>
+      <tr data-tier="pro"><td>Building the library fails <span class="badge-pro">Pro</span></td><td>Check that a C/C++ compiler is installed and you have internet access. Full error text is in Blender’s system console.</td></tr>
+      <tr><td>The texture “drifted” after simplification</td><td>Switch to a gentler mode for that level.<span data-tier="pro"> In Pro you can also raise UV Weight, enable Protect UV Seams, or disable Vertex Update / Permissive in Details.</span></td></tr>
+      <tr><td>The model looks almost unchanged</td><td>Switch to a more aggressive mode (Aggressive / Very Aggressive).<span data-tier="pro"> Or increase Target Error in the level’s Details.</span></td></tr>
+      <tr data-tier="pro"><td>A LOD gets “stuck” above the target % <span class="badge-pro">Pro</span></td><td>Turn on Prune and/or increase Target Error; for disconnected parts, Sparse helps; for debris, use Pre-prune.</td></tr>
+      <tr data-tier="pro"><td>Part of the mesh disappeared <span class="badge-pro">Pro</span></td><td>Turn off Prune / Permissive for that level, or lower Pre-prune.</td></tr>
+      <tr><td>The whole object disappeared</td><td>Use a gentler mode / raise the % for that level.<span data-tier="pro"> Or lower its Target Error — too high a value (with a low %) can collapse the mesh.</span></td></tr>
+      <tr data-tier="pro"><td>Presets aren’t being saved <span class="badge-pro">Pro</span></td><td>Presets are written to Blender’s user scripts folder — check Blender has write access there.</td></tr>
+      <tr><td>How do I delete an extra LOD object?</td><td>Delete it like any Blender object (<kbd>X</kbd> → Delete) — it’s recreated next time that level is generated.</td></tr>
+      <tr><td>Can I simplify just one level?</td><td>Yes — “Generate This LOD” on that level (section 9).</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="num">12.</span>License &amp; credits</h2>
+  <p>SimplyFive is distributed under the <b>GNU General Public License v3.0 or later</b>.</p>
+  <p>The add-on uses the <b>meshoptimizer</b> library by Arseny Kapoulkine (MIT License) —
+    <a href="https://github.com/zeux/meshoptimizer">github.com/zeux/meshoptimizer</a>. The full
+    license text and usage notice are in <code>THIRD-PARTY-NOTICES.txt</code> next to the add-on.</p>
+
+  <!-- ================= PRO: appendix A ================= -->
+  <h2 data-tier="pro">Appendix A. Building a fresh meshoptimizer <span class="badge-pro">Pro</span></h2>
+  <div data-tier="pro">
+    <p>The library is already bundled, so this isn’t needed for normal use. Rebuild only if you
+      want the very latest meshoptimizer from GitHub, or the bundled library is damaged.</p>
+    <div class="warn"><b>Important:</b> Building requires internet access and a C/C++ compiler
+      installed (the same one used to build other C add-ons).</div>
+    <ol>
+      <li>Open <b>Edit → Preferences → Add-ons → SimplyFive</b> and expand its settings.</li>
+      <li>Click <b>“Build meshoptimizer (one-time)”</b> (or <b>“Rebuild”</b>).</li>
+      <li>Wait ~a minute — the add-on downloads the source, compiles it, and loads the library.</li>
+      <li>Confirm the status changed to the “ready / built” state.</li>
+    </ol>
+    <p>If something goes wrong, the error text is shown there and in Blender’s system console
+      (Window → Toggle System Console on Windows) — usually a missing compiler or no internet.</p>
+  </div>
+
+  <footer>
+    SimplyFive — GPL-3.0-or-later. This manual covers both the free <b>Light</b> and the
+    <b>Pro</b> edition; use the edition selector at the top to hide or show Pro-only features.
+  </footer>
+</div>
+
+<script>
+  (function(){
+    var sel = document.getElementById('edition');
+    var body = document.body;
+    var note = document.getElementById('editnote');
+    var NOTES = {
+      light: 'You are viewing the Light (free) edition. Pro-only features are hidden — switch the selector above to “Pro” to see everything.',
+      pro:   'You are viewing the Pro edition. Everything is shown; items marked “Pro” are exclusive to the paid version.'
+    };
+    function apply(ed){
+      body.setAttribute('data-edition', ed);
+      note.textContent = NOTES[ed];
+      try{ localStorage.setItem('sf5_docs_edition', ed); }catch(e){}
+    }
+    var saved = 'light';
+    try{ saved = localStorage.getItem('sf5_docs_edition') || 'light'; }catch(e){}
+    sel.value = saved;
+    apply(saved);
+    sel.addEventListener('change', function(){ apply(sel.value); });
+  })();
+</script>
+</body>
+</html>
