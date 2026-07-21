@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="media/favicon.png">
 <title>SimplyFive — LOD Generator for Blender</title>
 <style>
   :root {
@@ -162,6 +163,7 @@
     text-transform: uppercase; color: var(--hero-dim);
   }
   #lodCanvas { display: block; width: 100%; height: auto; }
+  .shot-wrap { margin-top: 1.4rem; }
   .shot-stage { aspect-ratio: 1040 / 300; }
   .shot-stage .shot-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius); }
   .shot-stage .shot-hint { display: none; }
@@ -315,7 +317,6 @@
         questionable licenses like the ones similar products ship with.
       </p>
       <div class="chips">
-        <span class="chip">meshoptimizer</span>
         <span class="chip" data-i18n="chip.shading">Shading-aware</span>
         <span class="chip" data-i18n="chip.uv">UV-preserving</span>
         <span class="chip" data-i18n="chip.local">100% local</span>
@@ -323,12 +324,9 @@
       </div>
     </div>
   </div>
-</section>
 
-<section class="band">
-  <div class="wrap">
+  <div class="wrap shot-wrap">
     <div class="lod-stage shot-stage" id="showStage">
-      <span class="lod-stage-label" data-i18n="shot.label">See SimplyFive in Blender</span>
       <img class="shot-img" alt="SimplyFive add-on in Blender" loading="lazy" data-base="media/showcase">
       <span class="shot-hint"></span>
     </div>
@@ -381,7 +379,7 @@
         <span class="region" data-i18n="buy.stars.region">International</span>
         <h3>Telegram Stars</h3>
         <p data-i18n="buy.stars.p">Pay with Telegram Stars from anywhere — right inside Telegram, no card or crypto wallet needed.</p>
-        <div class="price"><span class="price-old">1100 ⭐</span><span class="price-now">800 ⭐</span><span class="sale" data-i18n="buy.sale">sale</span></div>
+        <div class="price"><span class="price-old">800 ⭐</span><span class="price-now">500 ⭐</span><span class="sale" data-i18n="buy.sale">sale</span></div>
         <a class="btn btn-primary" href="#" data-pay="stars" data-i18n="buy.stars.btn">Pay with Telegram Stars</a>
         <span class="todo">// TODO: link to your Telegram bot / payment link</span>
       </div>

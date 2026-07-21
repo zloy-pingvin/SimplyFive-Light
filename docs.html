@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="media/favicon.png">
 <title>SimplyFive — User Manual / Инструкция</title>
 <style>
   :root{
@@ -80,6 +81,8 @@
   figure.ph img{display:block;max-width:100%;height:auto;border:1px solid var(--line);
     border-radius:var(--radius);}
   figure.ph figcaption{margin-top:7px;color:var(--text-dim);font-size:.85rem;text-align:center;}
+  /* captions removed: an empty caption under a loaded image shows nothing */
+  figure.ph:not(.missing) figcaption:empty{display:none;}
   /* graceful fallback shown until the .gif file exists */
   figure.ph.missing figcaption{border:1px dashed var(--line);border-radius:var(--radius);padding:18px;
     background:repeating-linear-gradient(45deg,transparent,transparent 10px,var(--line-soft) 10px,var(--line-soft) 11px);}
@@ -146,7 +149,7 @@
   <p data-l="ru">SimplyFive создаёт несколько упрощённых копий модели в один клик (LOD — уровень
     детализации): чем дальше объект от камеры, тем меньше полигонов ему нужно. Аддон сам решает, как
     убрать «лишние» треугольники, чтобы силуэт, текстуры и затенение пострадали как можно меньше.</p>
-  <figure class="ph"><img data-base="media/01-lod-levels" alt="One model shown with 4 levels of detail side by side" loading="lazy"><figcaption><span data-l="en">One model shown with 4 levels of detail side by side — from detailed to simple.</span><span data-l="ru">Одна модель с 4 уровнями детализации в ряд — от детальной к простой.</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/01-lod-levels" alt="One model shown with 4 levels of detail side by side" loading="lazy"><figcaption></figcaption></figure>
 
   <h2><span class="num">2.</span><span data-l="en">Installing the add-on</span><span data-l="ru">Установка аддона</span></h2>
   <ol>
@@ -154,7 +157,6 @@
     <li><span data-l="en">Click <b>“Install...”</b> and select the SimplyFive folder/archive.</span><span data-l="ru">Нажмите <b>«Install...»</b> и выберите папку/архив SimplyFive.</span></li>
     <li><span data-l="en">Enable the checkbox next to the add-on in the list.</span><span data-l="ru">Включите галочку напротив аддона в списке.</span></li>
   </ol>
-  <figure class="ph"><img data-base="media/02-install" alt="Preferences Add-ons window with SimplyFive enabled" loading="lazy"><figcaption><span data-l="en">Preferences → Add-ons window with SimplyFive found and enabled.</span><span data-l="ru">Окно Preferences → Add-ons с найденным и включённым SimplyFive.</span></figcaption></figure>
 
   <h3><span data-l="en">2.1 The meshoptimizer library</span><span data-l="ru">2.1 Библиотека meshoptimizer</span></h3>
   <p data-l="en">The add-on uses the third-party <b>meshoptimizer</b> library, which does the actual
@@ -165,7 +167,7 @@
     упрощение геометрии. Она уже встроена в аддон — ничего дополнительно делать не нужно, кнопки
     генерации работают сразу после установки. В Preferences можно убедиться, что статус библиотеки —
     <b>ready</b> (готова).</p>
-  <figure class="ph"><img data-base="media/03-library-ready" alt="Add-on Preferences showing the library ready status" loading="lazy"><figcaption><span data-l="en">Add-on Preferences showing the library “ready” status.</span><span data-l="ru">Preferences аддона со статусом библиотеки «ready».</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/03-library-ready" alt="Add-on Preferences showing the library ready status" loading="lazy"><figcaption></figcaption></figure>
   <p data-tier="pro"><span class="badge-pro">Pro</span> <span data-l="en"><b>Tip:</b> Pro can also rebuild the
     library from source (e.g. to pull a newer meshoptimizer) with a button in Preferences — see
     Appendix A. Light always ships and loads the bundled library only.</span><span data-l="ru"><b>Совет:</b>
@@ -183,7 +185,7 @@
   </ol>
   <p data-l="en">At the top of the panel you’ll see the selected object’s name and its current triangle / vertex count.</p>
   <p data-l="ru">Вверху панели — имя выбранного объекта и его текущее число треугольников / вершин.</p>
-  <figure class="ph"><img data-base="media/04-panel-location" alt="Viewport with sidebar open pointing to the LODs tab" loading="lazy"><figcaption><span data-l="en">Viewport with the sidebar open, arrow pointing to the LODs tab.</span><span data-l="ru">Вьюпорт с открытой боковой панелью, стрелка на вкладку LODs.</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/04-panel-location" alt="Viewport with sidebar open pointing to the LODs tab" loading="lazy"><figcaption></figcaption></figure>
 
   <h2><span class="num">4.</span><span data-l="en">Creating LODs in 5 steps</span><span data-l="ru">Создание LOD в 5 шагов</span></h2>
   <ol>
@@ -193,7 +195,7 @@
     <li><span data-l="en">Optionally adjust the triangle percentage (<b>%</b>) for each level.</span><span data-l="ru">При желании поправьте процент треугольников (<b>%</b>) для каждого уровня.</span></li>
     <li><span data-l="en">Click the big <b>“Generate LODs”</b> button at the bottom.</span><span data-l="ru">Нажмите большую кнопку <b>«Generate LODs»</b> внизу.</span></li>
   </ol>
-  <figure class="ph"><img data-base="media/05-generate-lods" alt="Filled-in LODs panel before clicking Generate LODs" loading="lazy"><figcaption><span data-l="en">Filled-in LODs panel right before clicking Generate LODs.</span><span data-l="ru">Заполненная панель LODs перед нажатием Generate LODs.</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/05-generate-lods" alt="Filled-in LODs panel before clicking Generate LODs" loading="lazy"><figcaption></figcaption></figure>
   <p data-l="en">After generation, new objects appear: your original is renamed to <code>name_lod_0</code>, and <code>name_lod_1</code>, <code>name_lod_2</code>, … appear next to it — one per level.</p>
   <p data-l="ru">После генерации появятся новые объекты: исходный переименуется в <code>name_lod_0</code>, рядом появятся <code>name_lod_1</code>, <code>name_lod_2</code>, … — по одному на уровень.</p>
   <div class="warn"><b><span data-l="en">Important:</span><span data-l="ru">Важно:</span></b> <span data-l="en">Running generation again for the same object deletes and recreates old LOD objects with the same names — previous versions are not kept.</span><span data-l="ru">Повторный запуск генерации для того же объекта удаляет и пересоздаёт старые LOD-объекты с теми же именами — предыдущие версии не сохраняются.</span></div>
@@ -252,7 +254,7 @@
   <div data-tier="pro">
     <p data-l="en">The built-in modes are enough for most cases. But if something’s off — the model “breaks”, the texture drifts, or too many polygons remain — expand <b>“Details”</b> under that level’s mode and adjust the parameters by hand. Changing any of them switches the mode to <b>“Custom”</b> automatically.</p>
     <p data-l="ru">Встроенных режимов хватает в большинстве случаев. Но если что-то не так — модель «ломается», текстура плывёт или остаётся слишком много полигонов — разверните <b>«Details»</b> под режимом уровня и правьте параметры вручную. Любое изменение автоматически переключает режим в <b>«Custom»</b>.</p>
-    <figure class="ph"><img data-base="media/06-details" alt="Expanded Details block of one LOD level" loading="lazy"><figcaption><span data-l="en">Expanded Details block of one LOD level with all parameters.</span><span data-l="ru">Развёрнутый блок Details одного уровня со всеми параметрами.</span></figcaption></figure>
+    <figure class="ph"><img data-base="media/06-details" alt="Expanded Details block of one LOD level" loading="lazy"><figcaption></figcaption></figure>
 
     <h3><span data-l="en">7.1 Target Error — the main parameter</span><span data-l="ru">7.1 Target Error — главный параметр</span></h3>
     <p data-l="en">The “allowed error” of simplification — how much the result may differ from the original (by default a fraction of the model’s size, 0–1).</p>
@@ -305,12 +307,12 @@
     <li><span data-l="en">Or click <b>“Only This LOD”</b> next to the level you want; <b>“Show All LODs”</b> makes every level visible again.</span><span data-l="ru">Или нажмите <b>«Only This LOD»</b> у нужного уровня; <b>«Show All LODs»</b> снова показывает все.</span></li>
     <li><span data-l="en">The <b>“Line Up LODs”</b> button lays every level out in a row (isolated in local view) to compare the progression side by side.</span><span data-l="ru">Кнопка <b>«Line Up LODs»</b> выстраивает все уровни в ряд (изолируя в local view) для сравнения бок о бок.</span></li>
   </ul>
-  <figure class="ph"><img data-base="media/07-lod-preview" alt="LOD Preview slider and Only This LOD / Show All LODs buttons" loading="lazy"><figcaption><span data-l="en">The LOD Preview slider and the “Only This LOD” / “Show All LODs” buttons.</span><span data-l="ru">Слайдер LOD Preview и кнопки «Only This LOD» / «Show All LODs».</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/07-lod-preview" alt="LOD Preview slider and Only This LOD / Show All LODs buttons" loading="lazy"><figcaption></figcaption></figure>
 
   <h2><span class="num">9.</span><span data-l="en">Fixing just one level</span><span data-l="ru">Исправить только один уровень</span></h2>
   <p data-l="en">You don’t have to recreate everything. Change the settings for the level you want and click <b>“Generate This LOD”</b> in its block — the other levels stay untouched.</p>
   <p data-l="ru">Не обязательно пересоздавать всё. Измените настройки нужного уровня и нажмите <b>«Generate This LOD»</b> в его блоке — остальные уровни не тронутся.</p>
-  <figure class="ph"><img data-base="media/08-generate-single" alt="Generate This LOD button on a single level" loading="lazy"><figcaption><span data-l="en">The “Generate This LOD” button on a single level.</span><span data-l="ru">Кнопка «Generate This LOD» на отдельном уровне.</span></figcaption></figure>
+  <figure class="ph"><img data-base="media/08-generate-single" alt="Generate This LOD button on a single level" loading="lazy"><figcaption></figcaption></figure>
 
   <!-- PRO: presets -->
   <h2 data-tier="pro"><span class="num">10.</span><span data-l="en">Saving your own settings</span><span data-l="ru">Сохранение своих настроек</span> <span class="badge-pro">Pro</span></h2>
@@ -324,7 +326,7 @@
     </ol>
     <p data-l="en">The <b>“Restore Defaults”</b> button in the same menu resets settings to factory values.</p>
     <p data-l="ru">Кнопка <b>«Restore Defaults»</b> в том же меню сбрасывает настройки к заводским.</p>
-    <figure class="ph"><img data-base="media/09-presets" alt="LOD Presets menu with add and remove buttons" loading="lazy"><figcaption><span data-l="en">The LOD Presets menu with + / − buttons and saved presets.</span><span data-l="ru">Меню LOD Presets с кнопками + / − и сохранёнными пресетами.</span></figcaption></figure>
+    <figure class="ph"><img data-base="media/09-presets" alt="LOD Presets menu with add and remove buttons" loading="lazy"><figcaption></figcaption></figure>
   </div>
 
   <h2><span class="num">11.</span><span data-l="en">Frequently asked questions</span><span data-l="ru">Частые вопросы</span></h2>
