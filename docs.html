@@ -389,6 +389,10 @@
     function get(k){try{return localStorage.getItem(k);}catch(e){return null;}}
     function renderNote(){
       var l=root.lang==='ru'?'ru':'en', ed=body.getAttribute('data-edition')||'light';
+      // The note only warns Light readers that Pro sections are hidden.
+      // In Pro everything is visible, so there is nothing to announce — hide it.
+      if(ed==='pro'){ note.style.display='none'; note.textContent=''; return; }
+      note.style.display='';
       note.textContent=NOTES[l][ed];
     }
     function applyEdition(ed){body.setAttribute('data-edition',ed);sel.value=ed;renderNote();store('sf5_docs_edition',ed);}
