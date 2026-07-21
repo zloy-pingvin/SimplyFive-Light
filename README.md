@@ -31,7 +31,6 @@ Requires Blender: 5.0.0+ (may also work on 3.0.0+, but not thoroughly tested)
 - Configurable LOD name suffix (Preferences), default `_lod_`.
 - In-viewport LOD preview slider, plus a **Line Up LODs** review mode that
   lays all levels out in a row for side-by-side comparison.
-- Russian UI localization.
 
 ## Pro version
 
