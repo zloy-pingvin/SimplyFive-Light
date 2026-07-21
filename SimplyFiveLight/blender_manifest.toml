@@ -1,0 +1,36 @@
+schema_version = "1.0.0"
+
+# Unique, lowercase, underscores only. Do NOT change after first publish.
+id = "simplyfive_light"
+version = "1.1.2"
+name = "SimplyFive Light"
+tagline = "One-click LOD meshes via meshoptimizer"
+maintainer = "zloy_pingvin"
+type = "add-on"
+
+website = "https://zloy-pingvin.github.io/SimplyFive-Light/"
+
+# Valid Blender add-on tags only.
+tags = ["Mesh", "Modeling", "Pipeline"]
+
+# Extensions require Blender 4.2+; this add-on itself targets 5.0+.
+blender_version_min = "5.0.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+# Bundled meshoptimizer binaries next to this file:
+#   lodgen_meshopt.dll    - windows-x64
+#   lodgen_meshopt.so     - linux-x64 (ELF x86-64)
+#   lodgen_meshopt.dylib  - macOS universal (x86_64 + arm64)
+platforms = ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"]
+
+[build]
+# Never ship bytecode, git internals or release archives inside the extension.
+paths_exclude_pattern = [
+  "__pycache__/",
+  "*.pyc",
+  "/.git/",
+  "*.zip",
+]

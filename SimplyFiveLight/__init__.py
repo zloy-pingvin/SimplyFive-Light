@@ -7,9 +7,9 @@
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
     "author": "zloy_pingvin",
-    "version": (1, 1, 1),
+    "version": (1, 1, 2),
     "blender": (5, 0, 0),
-    "location": "View3D > Sidebar (N-panel) > LODs",
+    "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
         "Generate LOD meshes using meshoptimizer "
     ),
@@ -21,23 +21,12 @@ import bpy
 from mathutils import Matrix, Vector
 from . import translations
 from . import native_build
-from . import mesh_ops
 from .mesh_ops import (
     MESHOPT_LOCK_BORDER, MESHOPT_SPARSE, MESHOPT_ERROR_ABSOLUTE, MESHOPT_PRUNE,
     simplify_object,
 )
 from .native_build import native_available, try_load_native
-import os
 import re
-import sys
-import math
-import json
-import shutil
-import ctypes
-import tarfile
-import tempfile
-import subprocess
-import urllib.request
 
 try:
     import numpy as np
@@ -659,7 +648,7 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
     bl_idname = "VIEW3D_PT_lod_generator_light"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "LODsLight"
+    bl_category = "LODS"
 
     def draw(self, context):
         layout = self.layout
