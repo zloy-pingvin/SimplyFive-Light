@@ -7,7 +7,7 @@
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
     "author": "zloy_pingvin",
-    "version": (1, 1, 2),
+    "version": (1, 1, 3),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
@@ -612,10 +612,11 @@ class LODGENLIGHT_OT_show_all(bpy.types.Operator):
 # Panel
 # ---------------------------------------------------------------------------
 
-# Public page describing the paid Pro version. Shown as a "Get Pro" button in
-# the self-hosted / GitHub build only (SHOW_PRO_TEASER). Leave empty to draw
-# no button. Never put a raw crypto address here - link to a real payment page.
-PRO_URL = ""
+# Public page describing the paid Pro version. Shown as a "Get Pro" button
+# under the "available in Pro" teaser (self-hosted / GitHub build only,
+# SHOW_PRO_TEASER). Leave empty to draw no button. Never put a raw payment
+# address here - link to a real page.
+PRO_URL = "https://zloy-pingvin.github.io/SimplyFive-Light/#pricing"
 
 # Advanced per-LOD controls that live in Pro. Listed in the greyed teaser so
 # self-hosted users can see what the paid version adds.
@@ -633,14 +634,20 @@ PRO_LOD_FEATURES = (
 
 
 def _draw_pro_teaser(layout, features):
-    """Greyed 'available in Pro' block. Only drawn in the self-hosted build
-    (SHOW_PRO_TEASER on); the store build hides it entirely for a clean UI."""
+    """Greyed 'available in Pro' block + a "Get Pro" website button. Only
+    drawn in the self-hosted build (SHOW_PRO_TEASER on); the store build
+    hides it entirely for a clean UI. The button is drawn on the parent
+    layout, NOT inside the box: the box has enabled=False, which would make
+    any button inside it unclickable."""
     box = layout.box()
     box.enabled = False
     box.label(text="Advanced - available in Pro", icon='LOCKED')
     col = box.column(align=True)
     for feat in features:
         col.label(text=feat, icon='DOT')
+    if PRO_URL:
+        layout.operator("wm.url_open", text="Get SimplyFive Pro",
+                        icon='UNLOCKED').url = PRO_URL
 
 
 class VIEW3D_PT_lod_generator(bpy.types.Panel):
@@ -684,10 +691,10 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
         lod0_obj = family0.get(0)
         lod0_isolated = (lod0_obj is not None and not lod0_obj.hide_get() and
                           all(o.hide_get() for idx, o in family0.items() if idx != 0))
-        row.operator("lodgenlight.show_all", text="Show All LODs", icon='HIDE_OFF')
-        op = row.operator("lodgenlight.isolate", text="Only This LOD", icon='HIDE_ON',
+        op = row.operator("lodgenlight.isolate", text="Only This LOD", icon='HIDE_OFF',
                            depress=lod0_isolated)
         op.lod_index = 0
+        row.operator("lodgenlight.show_all", text="Show All LODs", icon='RENDERLAYERS')
 
         layout.separator()
         col = layout.column(align=True)
@@ -748,10 +755,6 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
         layout.separator()
         layout.operator("lodgenlight.generate", icon='MOD_DECIM')
 
-        if SHOW_PRO_TEASER and PRO_URL:
-            layout.separator()
-            layout.operator("wm.url_open", text="Get SimplyFive Pro",
-                            icon='FUND').url = PRO_URL
 
 
 # ---------------------------------------------------------------------------

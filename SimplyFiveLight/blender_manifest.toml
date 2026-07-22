@@ -2,7 +2,7 @@ schema_version = "1.0.0"
 
 # Unique, lowercase, underscores only. Do NOT change after first publish.
 id = "simplyfive_light"
-version = "1.1.2"
+version = "1.1.3"
 name = "SimplyFive Light"
 tagline = "One-click LOD meshes via meshoptimizer"
 maintainer = "zloy_pingvin"
