@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="media/favicon.png">
+<title>SimplyFive — Changelog / История изменений</title>
+<style>
+  :root{
+    --bg:#0f1319; --surface:#191f29; --line:#2a3140; --line-soft:#222a37;
+    --text:#d9dee7; --text-dim:#8a92a2; --accent:#2f7ff2; --accent-2:#35c6ff;
+    --accent-ink:#04101f; --warn:#e0a030; --good:#3ec98a;
+    --maxw:900px; --radius:14px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#f2f5f9;--surface:#ffffff;--line:#dbe1ea;--line-soft:#e6ebf2;
+      --text:#14203a;--text-dim:#56617a;--accent:#1f6fe0;--accent-2:#109fdc;--accent-ink:#fff;}
+  }
+  :root[data-theme="dark"]{--bg:#0f1319;--surface:#191f29;--line:#2a3140;--line-soft:#222a37;
+    --text:#d9dee7;--text-dim:#8a92a2;--accent:#2f7ff2;--accent-2:#35c6ff;--accent-ink:#04101f;}
+  :root[data-theme="light"]{--bg:#f2f5f9;--surface:#ffffff;--line:#dbe1ea;--line-soft:#e6ebf2;
+    --text:#14203a;--text-dim:#56617a;--accent:#1f6fe0;--accent-2:#109fdc;--accent-ink:#fff;}
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px 120px;}
+
+  header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+  .top-in{max-width:var(--maxw);margin:0 auto;padding:12px 20px;display:flex;gap:14px;
+    align-items:center;flex-wrap:wrap;}
+  .backlink{font-size:.9rem;color:var(--text-dim);text-decoration:none;border:1px solid var(--line);
+    border-radius:9px;padding:6px 10px;white-space:nowrap;}
+  .backlink:hover{color:var(--text);border-color:var(--accent);}
+  .brand{font-weight:700;letter-spacing:.2px;font-size:1.05rem;}
+  .brand small{color:var(--text-dim);font-weight:500;}
+  .spacer{flex:1;}
+  .langsw{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .langbtn{font:inherit;font-size:.82rem;font-weight:600;color:var(--text-dim);background:var(--surface);
+    border:0;padding:6px 11px;cursor:pointer;}
+  .langbtn.on{background:var(--accent);color:var(--accent-ink);}
+  .edition{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--text-dim);}
+  select#edition{font:inherit;font-size:.92rem;color:var(--text);background:var(--surface);
+    border:1px solid var(--line);border-radius:9px;padding:6px 10px;cursor:pointer;}
+  select#edition:focus,.langbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+  .hero{padding:40px 0 8px;border-bottom:1px solid var(--line-soft);margin-bottom:8px;}
+  .hero h1{font-size:clamp(1.8rem,1.2rem+2.5vw,2.6rem);margin:.2em 0 .1em;line-height:1.15;}
+  .hero p.lead{color:var(--text-dim);font-size:1.05rem;max-width:66ch;margin:.4em 0 0;}
+  .editnote{margin:16px 0 0;font-size:.86rem;color:var(--text-dim);
+    border-left:3px solid var(--accent);padding:6px 0 6px 12px;}
+
+  a{color:var(--accent);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:.06em .4em;}
+
+  /* ---- release blocks ---- */
+  .rel{margin:1.6em 0;padding-top:1.4em;border-top:1px solid var(--line-soft);}
+  .rel:first-of-type{border-top:0;padding-top:.6em;}
+  .rel h2{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;
+    font-size:1.5rem;margin:.2em 0 .4em;scroll-margin-top:70px;}
+  .rel .ver{color:var(--accent);font-variant-numeric:tabular-nums;}
+  .rel .date{font-family:var(--mono);font-size:.82rem;color:var(--text-dim);font-weight:400;}
+  .rel .cur{font:700 .58rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--accent-ink);background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    border-radius:6px;padding:4px 7px;}
+
+  ul.changes{list-style:none;padding-left:0;margin:.4em 0 .2em;}
+  ul.changes li{position:relative;padding-left:1.3em;margin:.4em 0;}
+  ul.changes li::before{content:"";position:absolute;left:.15em;top:.6em;width:6px;height:6px;
+    border-radius:2px;background:color-mix(in srgb,var(--accent-2) 70%,var(--line));}
+  .k{display:inline-block;font:700 .6rem/1 var(--mono);letter-spacing:.04em;text-transform:uppercase;
+    border-radius:5px;padding:3px 6px;margin-right:.5em;vertical-align:middle;}
+  .k-add{color:var(--good);border:1px solid color-mix(in srgb,var(--good) 45%,var(--line));}
+  .k-fix{color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));}
+  .k-chg{color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 45%,var(--line));}
+  .badge-pro{display:inline-block;font:700 .58rem/1 var(--mono);letter-spacing:.06em;
+    color:var(--accent-ink);background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    border-radius:6px;padding:3px 6px;vertical-align:middle;margin-left:.4em;text-transform:uppercase;}
+  .badge-light{display:inline-block;font:700 .58rem/1 var(--mono);letter-spacing:.06em;
+    color:var(--text-dim);background:var(--surface);border:1px solid var(--line);
+    border-radius:6px;padding:2px 6px;vertical-align:middle;margin-left:.4em;text-transform:uppercase;}
+
+  /* edition toggle (shared with the manual's convention) */
+  body[data-edition="light"] [data-tier="pro"]{display:none !important;}
+  body[data-edition="pro"] [data-tier="light"]{display:none !important;}
+  /* language toggle */
+  html[lang="en"] [data-l="ru"]{display:none !important;}
+  html[lang="ru"] [data-l="en"]{display:none !important;}
+
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);
+    color:var(--text-dim);font-size:.85rem;}
+</style>
+</head>
+<body data-edition="light">
+
+<header class="top">
+  <div class="top-in">
+    <a class="backlink" href="index.html"><span data-l="en">← Back</span><span data-l="ru">← Назад</span></a>
+    <span class="brand">SimplyFive <small>· <span data-l="en">Changelog</span><span data-l="ru">Изменения</span></small></span>
+    <span class="spacer"></span>
+    <span class="langsw">
+      <button class="langbtn" data-setlang="en">EN</button>
+      <button class="langbtn" data-setlang="ru">RU</button>
+    </span>
+    <label class="edition"><span data-l="en">Edition:</span><span data-l="ru">Редакция:</span>
+      <select id="edition" aria-label="Changelog edition">
+        <option value="light" selected>Light</option>
+        <option value="pro">Pro</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1><span data-l="en">Changelog</span><span data-l="ru">История изменений</span></h1>
+    <p class="lead"><span data-l="en">Version history for SimplyFive. Use the selector to view changes
+      for the Light or Pro edition. Light and Pro share the same version number.</span><span data-l="ru">История
+      версий SimplyFive. Переключателем выберите изменения для редакции Light или Pro. Light и Pro имеют
+      одинаковый номер версии.</span></p>
+    <p class="editnote" id="editnote"></p>
+  </section>
+
+  <!-- ============================================================= -->
+  <!--  HOW TO ADD A VERSION — copy one <article class="rel"> block. -->
+  <!--  Mark each <li>:                                              -->
+  <!--    • common change  → no data-tier                            -->
+  <!--    • Light-only      → data-tier="light" + <span class="badge-light">Light</span> -->
+  <!--    • Pro-only        → data-tier="pro"   + <span class="badge-pro">Pro</span>     -->
+  <!--  Change kind label:  <span class="k k-add">Added</span> /      -->
+  <!--    k-fix "Fixed" / k-chg "Changed". Bilingual: wrap text in    -->
+  <!--    <span data-l="en">…</span><span data-l="ru">…</span>.       -->
+  <!--  Newest version on top. Add .cur badge to the current one.     -->
+  <!-- ============================================================= -->
+
+  <article class="rel">
+    <h2 id="v1-2-7">
+      <span class="ver">v1.2.7</span>
+      <span class="date">2026-07-26</span>
+      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
+    </h2>
+    <ul class="changes">
+      <li><span class="k k-add">Added</span><span data-l="en"><b>Finish with Decimate.</b> meshoptimizer alone stalls well above your target when UV / material / normal seams block it (ask for 1%, get 8%). The new finishing pass takes those aggressive LODs down to the exact target percentage — interpolating UVs along collapsed edges instead of smearing textures across seams.</span><span data-l="ru"><b>Доводка через Decimate.</b> Один meshoptimizer застревает заметно выше цели, когда мешают швы UV / материалов / нормалей (просишь 1% — получаешь 8%). Новый финишный проход доводит агрессивные LOD до точного целевого процента, интерполируя UV вдоль схлопнутых рёбер, а не размазывая текстуры через швы.</span></li>
+      <li><span class="k k-add">Added</span><span data-l="en"><b>“Very Aggressive Alternative” mode.</b> Plain Very Aggressive is now pure meshoptimizer; Very Aggressive Alternative adds the Decimate finish. Which one looks better genuinely depends on the model, so you can pick per mesh.</span><span data-l="ru"><b>Режим «Very Aggressive Alternative».</b> Обычный Very Aggressive теперь — чистый meshoptimizer; Very Aggressive Alternative добавляет доводку Decimate. Что выглядит лучше — зависит от модели, поэтому выбор теперь для каждого меша.</span></li>
+      <li><span class="k k-add">Added</span><span data-l="en"><b>Importance mask from a Vertex Group.</b> Bias simplification with a named vertex group (paint it in Weight Paint, safe on rigged / skinned meshes), in addition to vertex color. New <b>Importance Source</b> selector.</span><span data-l="ru"><b>Маска важности из Vertex Group.</b> Смещение упрощения по именованной группе вершин (красьте в Weight Paint — безопасно на риггованных / скинованных мешах), в дополнение к вершинным цветам. Новый селектор <b>Importance Source</b>.</span></li>
+      <li data-tier="pro"><span class="k k-add">Added</span><span data-l="en"><b>Normals: “Recalculate + Sharp Loops” — a third mode.</b> A single angle threshold breaks a structural loop on a simplified mesh; this one marks sharp edges in four stages: a second, lower angle continues a line already started, short gaps are bridged, dead-ends are trimmed, and stray fragments are removed.</span><span data-l="ru"><b>Нормали: «Recalculate + Sharp Loops» — третий режим.</b> Один порог угла рвёт конструктивный луп на упрощённом меше; этот размечает в четыре стадии: второй, более низкий угол продолжает начатую линию, короткие разрывы достраиваются, тупики обрезаются, обрывки убираются.</span><span class="badge-pro">Pro</span></li>
+      <li><span class="k k-chg">Changed</span><span data-l="en"><b>Sparse is now automatic.</b> Applied from the mesh data only when it actually helps — no manual option to get wrong.</span><span data-l="ru"><b>Sparse теперь автоматический.</b> Применяется по данным меша только когда реально помогает — ручной опции, которую можно выставить неверно, больше нет.</span></li>
+      <li data-tier="pro"><span class="k k-chg">Changed</span><span data-l="en"><b>Clear Simplify reworked</b> — no longer Sloppy: a regular collapse with normal recalculation.</span><span data-l="ru"><b>Clear Simplify переделан</b> — больше не Sloppy: обычное схлопывание с пересчётом нормалей.</span><span class="badge-pro">Pro</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en">UI fixes and removed dead code.</span><span data-l="ru">Исправления интерфейса и удаление мёртвого кода.</span></li>
+    </ul>
+  </article>
+
+  <!-- Older versions go below, newest first. -->
+
+</div>
+
+<footer>
+  <div class="wrap" style="padding-bottom:0;">
+    <span data-l="en">SimplyFive · </span><span data-l="ru">SimplyFive · </span>
+    <a href="index.html"><span data-l="en">Home</span><span data-l="ru">На главную</span></a> ·
+    <a href="docs.html"><span data-l="en">User Manual</span><span data-l="ru">Руководство пользователя</span></a>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var body=document.body, root=document.documentElement;
+    var sel=document.getElementById('edition'), note=document.getElementById('editnote');
+    var NOTES={
+      en:{light:'Showing changes for the Light (free) edition. Pro-only changes are hidden — switch the selector above to “Pro” to see them.',
+          pro:'Showing changes for the Pro edition — everything, including Pro-only items.'},
+      ru:{light:'Показаны изменения редакции Light (бесплатной). Изменения только для Pro скрыты — переключите селектор выше на «Pro», чтобы их увидеть.',
+          pro:'Показаны изменения редакции Pro — всё, включая пункты только для Pro.'}
+    };
+    function store(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+    function get(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+    function renderNote(){
+      var l=root.lang==='ru'?'ru':'en', ed=body.getAttribute('data-edition')||'light';
+      note.textContent=NOTES[l][ed];
+    }
+    function applyEdition(ed){body.setAttribute('data-edition',ed);sel.value=ed;renderNote();store('sf5_docs_edition',ed);}
+    function applyLang(l){
+      root.lang=l;
+      document.querySelectorAll('.langbtn').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-setlang')===l);});
+      renderNote();store('sf_lang',l);
+    }
+    // edition is shared with the manual (same localStorage key)
+    applyEdition(get('sf5_docs_edition')||'light');
+    sel.addEventListener('change',function(){applyEdition(sel.value);});
+    // language is shared with the landing (sf_lang)
+    var lang=get('sf_lang')||((navigator.language||'en').slice(0,2)==='ru'?'ru':'en');
+    applyLang(lang);
+    document.querySelectorAll('.langbtn').forEach(function(b){
+      b.addEventListener('click',function(){applyLang(b.getAttribute('data-setlang'));});
+    });
+  })();
+</script>
+</body>
+</html>

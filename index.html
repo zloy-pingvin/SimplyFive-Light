@@ -147,6 +147,20 @@
   .btn-ghost:hover { border-color: var(--accent-2); }
   .btn .tag { opacity: 0.7; font-weight: 400; }
 
+  .ver-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem;
+    margin-top: 1.1rem; font-family: var(--mono); font-size: 0.74rem;
+    letter-spacing: 0.03em; color: var(--hero-dim);
+  }
+  .ver-row .ver-now { color: var(--hero-text); }
+  .ver-row .ver-now b { color: var(--accent-2); font-weight: 700; }
+  .ver-row .ver-link {
+    color: var(--hero-dim); text-decoration: none;
+    border-bottom: 1px dashed color-mix(in srgb, var(--accent-2) 45%, transparent);
+    padding-bottom: 1px; transition: color .15s ease, border-color .15s ease;
+  }
+  .ver-row .ver-link:hover { color: var(--accent-2); border-color: var(--accent-2); }
+
   /* ---------- LOD VISUAL ---------- */
   .lod-stage {
     margin-top: clamp(2rem, 5vw, 3.2rem);
@@ -292,6 +306,11 @@
       <a class="btn btn-ghost" href="docs.html" data-i18n="cta.docs">User Manual</a>
     </div>
 
+    <div class="ver-row">
+      <span class="ver-now"><span data-i18n="ver.label">Current version</span>: <b>v1.2.7</b></span>
+      <a class="ver-link" href="changelog.html" data-i18n="ver.btn">View changes →</a>
+    </div>
+
     <div class="lod-stage">
       <span class="lod-stage-label" data-i18n="lod.label">Line Up LODs — one silhouette, five LODs</span>
       <canvas id="lodCanvas" width="1040" height="300" role="img"
@@ -419,7 +438,7 @@
       "hero.sub": 'A Blender add-on that generates a set of LOD meshes (Level of Detail) from the active object, using the <b>meshoptimizer</b> library. For each mesh you can create <b>up to 5</b> simplified versions with individual aggressiveness settings; simplification can take <b>UV&nbsp;unwrapping</b> (including multiple UV channels), <b>normals</b>, <b>vertex colors</b> (transferred, and usable as an importance map), and <b>materials</b> into account.',
       "cta.get": 'Get SimplyFive PRO <span class="tag">→</span>',
       "cta.light": "Try SimplyFive Light",
-      "cta.docs": "User Manual",
+      "cta.docs": "User Manual", "ver.label": "Current version", "ver.btn": "View changes →",
       "shot.label": "See SimplyFive in Blender",
       "lod.label": "Line Up LODs — one silhouette, five LODs",
       "why.eyebrow": "Why it's different",
@@ -458,7 +477,7 @@
       "hero.sub": 'Аддон для Blender, который создаёт набор LOD-мешей (уровней детализации) из активного объекта с помощью библиотеки <b>meshoptimizer</b>. Для каждого меша можно создать <b>до 5</b> упрощённых версий с индивидуальными настройками агрессивности; при упрощении могут учитываться <b>UV-развёртка</b> (включая несколько UV-каналов), <b>нормали</b>, <b>вершинные цвета</b> (переносятся и могут служить картой важности) и <b>материалы</b>.',
       "cta.get": 'Получить SimplyFive PRO <span class="tag">→</span>',
       "cta.light": "Попробовать SimplyFive Light",
-      "cta.docs": "Руководство пользователя",
+      "cta.docs": "Руководство пользователя", "ver.label": "Актуальная версия", "ver.btn": "Посмотреть изменения →",
       "shot.label": "SimplyFive в Blender",
       "lod.label": "Line Up LODs — один силуэт, пять LOD",
       "why.eyebrow": "В чём отличие",
