@@ -7,7 +7,7 @@
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
     "author": "zloy_pingvin",
-    "version": (1, 1, 3),
+    "version": (1, 2, 7),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
@@ -22,7 +22,7 @@ from mathutils import Matrix, Vector
 from . import translations
 from . import native_build
 from .mesh_ops import (
-    MESHOPT_LOCK_BORDER, MESHOPT_SPARSE, MESHOPT_ERROR_ABSOLUTE, MESHOPT_PRUNE,
+    MESHOPT_LOCK_BORDER, MESHOPT_ERROR_ABSOLUTE, MESHOPT_PRUNE,
     simplify_object,
 )
 from .native_build import native_available, try_load_native
@@ -132,36 +132,50 @@ def find_lod_family(base):
 
 
 FACTORY_MODE_PRESETS = {
-    'CAREFUL': dict(lock_border=True, use_sparse=False,
+    'CAREFUL': dict(lock_border=True,
                      use_prune=False, use_permissive=False, protect_uv_seams=False,
                      use_attributes=True, use_vertex_update=False,
                      normal_weight=0.5, uv_weight=0.5, target_error=0.02,
-                     preprune_threshold=0.0),
-    'STANDARD': dict(lock_border=True, use_sparse=False,
+                     preprune_threshold=0.0, use_decimate_finish=False),
+    'STANDARD': dict(lock_border=True,
                       use_prune=False, use_permissive=False, protect_uv_seams=False,
                       use_attributes=True, use_vertex_update=True,
                       normal_weight=0.5, uv_weight=0.5, target_error=0.15,
-                     preprune_threshold=0.0),
-    'AGGRESSIVE': dict(lock_border=False, use_sparse=True,
+                     preprune_threshold=0.0, use_decimate_finish=False),
+    'AGGRESSIVE': dict(lock_border=False,
                         use_prune=True, use_permissive=True, protect_uv_seams=True,
                         use_attributes=True, use_vertex_update=True,
                         normal_weight=0.2, uv_weight=0.2, target_error=0.3,
-                     preprune_threshold=0.02),
-    'VERY_AGGRESSIVE': dict(lock_border=False, use_sparse=True,
+                     preprune_threshold=0.02, use_decimate_finish=False),
+    # Pure meshopt: no Decimate finish, so the result keeps meshopt's topology
+    # and may stop above the requested percentage when seams block it.
+    'VERY_AGGRESSIVE': dict(lock_border=False,
                              use_prune=True, use_permissive=True, protect_uv_seams=False,
                              use_attributes=True, use_vertex_update=True,
                              normal_weight=0.01, uv_weight=1.0, target_error=0.5,
-                     preprune_threshold=0.07),
+                     preprune_threshold=0.07, use_decimate_finish=False),
+    # Same settings, finished with Decimate so the exact target is reached even
+    # when meshopt stalls; that pass needs protected UV seams, so both are on
+    # together. Which of the two wins depends on the model. (Light's only way to
+    # turn the Decimate finish off, since per-LOD fields aren't editable here.)
+    'VERY_AGGRESSIVE_ALT': dict(lock_border=False,
+                             use_prune=True, use_permissive=True, protect_uv_seams=True,
+                             use_attributes=True, use_vertex_update=True,
+                             normal_weight=0.01, uv_weight=1.0, target_error=0.5,
+                     preprune_threshold=0.07, use_decimate_finish=True),
 }
 
 # The fields a Mode preset writes onto a LOD slot when selected. These drive
 # the actual meshoptimizer call. The Light UI does not expose them for manual
 # per-LOD editing (that fine-tuning is a Pro feature), so a slot's effective
-# values always come straight from its selected Mode.
+# values always come straight from its selected Mode. Sparse is NOT here - it
+# is derived from the buffers at generation time (mesh_ops.apply_sparse_option).
+# protect_uv_seams stays before use_decimate_finish: the finish pass relies on
+# seam protection, so the mode sets the guard first.
 PRESET_FIELDS = [
-    "lock_border", "use_sparse", "use_prune", "use_permissive", "protect_uv_seams",
-    "use_attributes", "use_vertex_update", "normal_weight", "uv_weight",
-    "target_error", "preprune_threshold",
+    "lock_border", "use_prune", "use_permissive", "protect_uv_seams",
+    "use_decimate_finish", "use_attributes", "use_vertex_update",
+    "normal_weight", "uv_weight", "target_error", "preprune_threshold",
 ]
 
 
@@ -221,10 +235,13 @@ MODE_ITEMS = [
     ('STANDARD', "Standard",
      "Balanced: keeps UVs/normals, Vertex Update on, moderate Target Error"),
     ('AGGRESSIVE', "Aggressive",
-     "Permissive + Prune + Sparse + protected UV seams, higher Target Error"),
+     "Permissive + Prune + protected UV seams, higher Target Error"),
     ('VERY_AGGRESSIVE', "Very Aggressive",
-     "Like Aggressive but UV seams not protected and attribute weights are "
-     "very low - pushes triangle count much lower, more UV drift"),
+     "Like Aggressive with very low attribute weights and a higher Target "
+     "Error. meshopt only - may stop above the requested percentage"),
+    ('VERY_AGGRESSIVE_ALT', "Very Aggressive Alternative",
+     "Very Aggressive plus a Decimate pass down to the exact percentage, with "
+     "UV seams protected. Which of the two works better depends on the model"),
 ]
 
 
@@ -250,12 +267,12 @@ def make_lod_slot_class(class_name, default_percent, default_mode):
             name="Target Error", default=preset['target_error'], min=0.0, max=1.0, precision=4),
         'lock_border': bpy.props.BoolProperty(
             name="Lock Open Edges", default=preset['lock_border']),
-        'use_sparse': bpy.props.BoolProperty(
-            name="Sparse", default=preset['use_sparse']),
         'use_prune': bpy.props.BoolProperty(
             name="Prune (aggressive)", default=preset['use_prune']),
         'protect_uv_seams': bpy.props.BoolProperty(
             name="Protect UV Seams", default=preset['protect_uv_seams']),
+        'use_decimate_finish': bpy.props.BoolProperty(
+            name="Finish with Decimate", default=preset['use_decimate_finish']),
         'use_permissive': bpy.props.BoolProperty(
             name="Permissive (aggressive)", default=preset['use_permissive']),
         'use_attributes': bpy.props.BoolProperty(
@@ -344,7 +361,7 @@ class LodGenPropsLight(bpy.types.PropertyGroup):
         name="LOD Preview (distance)", default=0, min=0, max=MAX_LODS,
         description="Simulates moving away from the object: 0 = lod_0 (closest), "
                     "higher = further/more aggressive LODs. Same effect as the "
-                    "'Only This LOD' buttons below",
+                    "'Only This LOD' buttons",
         update=_on_lod_preview_change)
     lod_1: bpy.props.PointerProperty(type=LodSlotPropsLight1)
     lod_2: bpy.props.PointerProperty(type=LodSlotPropsLight2)
@@ -359,10 +376,9 @@ class LodGenPropsLight(bpy.types.PropertyGroup):
                     "very aggressive LODs, especially with multiple materials")
     merge_by_distance: bpy.props.BoolProperty(
         name="Merge by Distance", default=True,
-        description="Weld coincident-position vertices on the result (Blender's "
-                    "own Merge by Distance). Safe for UV seams - UVs/normals are "
-                    "stored per face-corner, not per vertex, so welding topology "
-                    "doesn't blend or lose them. Keep the threshold small")
+        description="Weld coincident vertices on the result (Blender's Merge by "
+                    "Distance). UVs and normals are stored per face-corner, so "
+                    "welding does not blend them")
     merge_distance: bpy.props.FloatProperty(
         name="Merge Threshold", default=0.0001, min=0.0, max=0.01, precision=5,
         description="Keep this small - a large value can weld nearby but "
@@ -372,27 +388,36 @@ class LodGenPropsLight(bpy.types.PropertyGroup):
         description="Internal state of the 'Line Up LODs' review mode")
     use_multi_uv: bpy.props.BoolProperty(
         name="Multiple UV Channels", default=False,
-        description="Carry every UV channel of the source mesh (not just the "
-                    "active one) onto the LODs, keeping the original layer "
-                    "names and active/render flags. All channels count in the "
-                    "error metric with the same UV Weight. Off = only the "
-                    "active UV channel is kept and other channels are not "
-                    "copied. On = geometric quality can drop slightly at the "
-                    "same percentage, because extra UV seams (e.g. lightmap "
-                    "islands in UV2) constrain simplification")
+        description="Carry every UV channel onto the LODs, keeping names and "
+                    "active/render flags. All of them enter the error metric "
+                    "with the same UV Weight, so extra seams constrain "
+                    "simplification. Off = only the active channel is copied")
     use_vcolor_importance: bpy.props.BoolProperty(
-        name="Use Vertex Color as Importance", default=False,
-        description="Read the active vertex color layer as a per-vertex "
-                    "importance map (luminance: white = important, black = "
-                    "unimportant) for every LOD. Important areas become "
-                    "costlier to collapse, so they keep more detail. Paint it "
-                    "with Blender's Vertex Paint mode")
+        name="Importance Mask", default=False,
+        description="Bias simplification with a per-vertex importance map: "
+                    "important areas cost more to collapse, so they keep more "
+                    "detail. Pick the source with Importance Source")
     vcolor_importance_weight: bpy.props.FloatProperty(
         name="Importance Strength", default=0.5, min=0.0, max=1.0,
-        description="How strongly vertex color importance biases simplification. "
+        description="How strongly the importance mask biases simplification. "
                     "This is a soft weight (a penalty in the error metric), not "
                     "a hard guarantee - very aggressive ratios may still touch "
                     "important areas")
+    importance_source: bpy.props.EnumProperty(
+        name="Importance Source", default='VCOLOR',
+        description="Where the per-vertex importance mask is read from",
+        items=[
+            ('VCOLOR', "Vertex Color",
+             "Luminance of the active color attribute (white = important)"),
+            ('VGROUP', "Vertex Group",
+             "Weights of a named vertex group (1 = important) - editable in "
+             "Weight Paint, and never guessed, so bone weights on a rigged "
+             "mesh are left alone"),
+        ])
+    importance_vgroup: bpy.props.StringProperty(
+        name="Importance Group", default="",
+        description="Vertex group whose weights drive the importance mask "
+                    "(used only when Source = Vertex Group)")
 
 
 # ---------------------------------------------------------------------------
@@ -413,8 +438,6 @@ def generate_one_lod(context, lod0, base, i, slot, props):
     options = 0
     if slot.lock_border:
         options |= MESHOPT_LOCK_BORDER
-    if slot.use_sparse:
-        options |= MESHOPT_SPARSE
     if slot.use_prune:
         options |= MESHOPT_PRUNE
     if slot.use_permissive:
@@ -428,11 +451,14 @@ def generate_one_lod(context, lod0, base, i, slot, props):
             slot.use_attributes, slot.normal_weight, slot.uv_weight, name,
             props.merge_by_distance, props.merge_distance,
             use_vertex_update=slot.use_vertex_update,
-            protect_uv_seams=slot.protect_uv_seams,
+            protect_uv_seams=slot.protect_uv_seams or slot.use_decimate_finish,
             use_vcolor_importance=props.use_vcolor_importance,
             importance_weight=props.vcolor_importance_weight,
             preprune_threshold=slot.preprune_threshold,
             use_multi_uv=props.use_multi_uv,
+            use_decimate_finish=slot.use_decimate_finish,
+            importance_source=props.importance_source,
+            importance_vgroup=props.importance_vgroup,
         )
     except Exception as exc:
         print(f"[LOD Generator] LOD {i} failed: {exc}")
@@ -622,7 +648,7 @@ PRO_URL = "https://zloy-pingvin.github.io/SimplyFive-Light/#pricing"
 # self-hosted users can see what the paid version adds.
 PRO_LOD_FEATURES = (
     "Per-LOD Target Error",
-    "Lock Border / Sparse / Prune",
+    "Lock Border / Prune",
     "Permissive + Protect UV Seams",
     "Vertex Update, Normal / UV Weight",
     "Sloppy (topology-ignoring)",
@@ -744,6 +770,13 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
 
         col.prop(props, "use_vcolor_importance")
         if props.use_vcolor_importance:
+            col.prop(props, "importance_source")
+            if props.importance_source == 'VGROUP':
+                obj = context.active_object
+                if obj is not None:
+                    col.prop_search(props, "importance_vgroup", obj, "vertex_groups")
+                else:
+                    col.prop(props, "importance_vgroup")
             col.prop(props, "vcolor_importance_weight", slider=True)
             # Hard-lock above a threshold is a Pro feature; greyed teaser only,
             # shown here (under importance) just like it sits in Pro.

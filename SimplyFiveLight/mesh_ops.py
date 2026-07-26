@@ -13,28 +13,16 @@ from . import native_build
 from .native_build import c_float_p, c_uint_p, c_ubyte_p
 
 
+# Temporary vertex group used to feed the importance mask to Blender's
+# Decimate (Finish with Decimate); always removed again after the modifier.
+DECIMATE_IMPORTANCE_GROUP = "SF_DecimateImportance"
+
+
 def get_evaluated_mesh(context, obj):
     depsgraph = context.evaluated_depsgraph_get()
     eval_obj = obj.evaluated_get(depsgraph)
     me = eval_obj.to_mesh()
     return eval_obj, me
-
-
-def boundary_vertex_mask(me):
-    edge_face_count = {}
-    for poly in me.polygons:
-        verts = poly.vertices
-        n = len(verts)
-        for i in range(n):
-            a, b = verts[i], verts[(i + 1) % n]
-            key = (a, b) if a < b else (b, a)
-            edge_face_count[key] = edge_face_count.get(key, 0) + 1
-    mask = np.zeros(len(me.vertices), dtype=np.uint8)
-    for (a, b), c in edge_face_count.items():
-        if c == 1:
-            mask[a] = 1
-            mask[b] = 1
-    return mask
 
 
 def mesh_to_position_buffers(me):
@@ -48,7 +36,26 @@ def mesh_to_position_buffers(me):
     return positions, indices
 
 
-def mesh_to_attribute_buffers(me, use_multi_uv=False):
+def read_vertex_group_weights(obj, me, group_name):
+    """Per-vertex weights of a named vertex group as a 0-1 array (1 =
+    important), or None if the group doesn't exist. Vertex groups live on the
+    object while the weights live in the mesh, so both must come from the
+    same evaluated pair. There is no foreach_get for deform weights, hence
+    the explicit loop - it is cheaper than the per-loop pass this feeds."""
+    group = obj.vertex_groups.get(group_name) if group_name else None
+    if group is None:
+        return None
+    index = group.index
+    weights = np.zeros(len(me.vertices), dtype=np.float32)
+    for i, vert in enumerate(me.vertices):
+        for g in vert.groups:
+            if g.group == index:
+                weights[i] = g.weight
+                break
+    return weights
+
+
+def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None):
     """Per-loop dedup, like a GPU vertex buffer: every unique
     (vertex, normal, uv, material) becomes its own entry. meshoptimizer's
     simplifyWithAttributes is specifically designed to handle the resulting
@@ -131,7 +138,9 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False):
                 uv = (0.0, 0.0)
                 key = (vi, round(n[0], 5), round(n[1], 5), round(n[2], 5), mat_id)
 
-            if color_per_loop:
+            if vgroup_weights is not None:
+                imp = vgroup_weights[vi]
+            elif color_per_loop:
                 imp = _lum(color_layer.data[li].color)
             elif color_per_point:
                 imp = _lum(color_layer.data[vi].color)
@@ -163,14 +172,14 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False):
         uv_info,
         np.array(mat_ids, dtype=np.int32),
         np.array(importance, dtype=np.float32),
-        color_layer is not None,
+        vgroup_weights is not None or color_layer is not None,
         np.array(colors, dtype=np.float32),
         color_info,
     )
 
 
 def compact_after_simplify(positions, simplified_indices, normals=None, uvs=None, mat_ids=None,
-                            colors=None):
+                            colors=None, importance=None):
     unique_idx, inverse = np.unique(simplified_indices, return_inverse=True)
     new_positions = positions[unique_idx]
     new_faces = inverse.astype(np.uint32).reshape(-1, 3)
@@ -178,13 +187,32 @@ def compact_after_simplify(positions, simplified_indices, normals=None, uvs=None
     new_uvs = uvs[unique_idx] if uvs is not None else None
     new_mat_ids = mat_ids[unique_idx] if mat_ids is not None else None
     new_colors = colors[unique_idx] if colors is not None else None
-    return new_positions, new_faces, new_normals, new_uvs, new_mat_ids, new_colors
+    new_importance = importance[unique_idx] if importance is not None else None
+    return (new_positions, new_faces, new_normals, new_uvs, new_mat_ids,
+            new_colors, new_importance)
 
 
 MESHOPT_LOCK_BORDER = 1      # meshopt_SimplifyLockBorder
 MESHOPT_SPARSE = 2           # meshopt_SimplifySparse
 MESHOPT_ERROR_ABSOLUTE = 4   # meshopt_SimplifyErrorAbsolute
 MESHOPT_PRUNE = 8            # meshopt_SimplifyPrune
+
+
+def apply_sparse_option(options, positions, indices):
+    """meshopt_SimplifySparse states a precondition, not a preference: it is
+    valid exactly when the index buffer references only part of the vertex
+    buffer (it also makes target_error relative to that subset's extents).
+    That is a property of the buffers we just built - after the pre-prune
+    pass, or with loose vertices - so it's decided here instead of being a
+    checkbox users have no way to evaluate. Any incoming bit is cleared so a
+    stale preset can't force it on a dense buffer."""
+    options &= ~MESHOPT_SPARSE
+    if len(indices):
+        used = np.zeros(positions.shape[0], dtype=bool)
+        used[indices] = True
+        if int(used.sum()) < positions.shape[0]:
+            options |= MESHOPT_SPARSE
+    return options
 
 
 def as_c_float_p(np_array):
@@ -375,6 +403,95 @@ def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
     return positions, new_indices, new_normals, new_uvs, result_error.value
 
 
+def mesh_tri_count(me):
+    """Triangle count of a mesh (n-gons counted as len-2 tris), via foreach_get
+    so it stays cheap even on dense meshes."""
+    n = len(me.polygons)
+    if n == 0:
+        return 0
+    loop_totals = np.empty(n, dtype=np.int32)
+    me.polygons.foreach_get("loop_total", loop_totals)
+    return int(np.maximum(loop_totals - 2, 0).sum())
+
+
+def _select_only(obj):
+    """Make obj the sole selected + active object in OBJECT mode - required
+    before running a modifier operator on it."""
+    view_layer = bpy.context.view_layer
+    if obj.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    for o in view_layer.objects:
+        o.select_set(o == obj)
+    view_layer.objects.active = obj
+
+
+def build_decimate_importance_group(obj, importance, lock_threshold=None):
+    """Feed our importance map to Blender's Decimate as a vertex group.
+    Semantics come straight from bmesh_decimate_collapse.cc:
+
+        if (vweights && (w1 == 0.0f || w2 == 0.0f)) goto clear;   // never collapse
+        e_weight = 2.0f - (w1 + w2);
+        cost += edge_length * (e_weight * vweight_factor);
+
+    so LOW weight = expensive = preserved, and weight exactly 0 is a hard
+    lock - the inverse of our 'white = important' convention. We therefore
+    store (1 - importance), and only let it reach a true 0 when the user
+    asked for a hard lock; otherwise a pure-white area would silently
+    become uncollapsible and stall the finish pass."""
+    weights = 1.0 - np.clip(np.asarray(importance, dtype=np.float32), 0.0, 1.0)
+    if lock_threshold is not None:
+        weights = np.where(importance >= lock_threshold, 0.0, np.maximum(weights, 1e-3))
+    else:
+        weights = np.maximum(weights, 1e-3)
+
+    group = obj.vertex_groups.new(name=DECIMATE_IMPORTANCE_GROUP)
+    zero_idx = np.flatnonzero(weights <= 0.0)
+    if zero_idx.size:
+        group.add(zero_idx.tolist(), 0.0, 'REPLACE')
+    # Quantized buckets: one add() call per distinct weight instead of one per
+    # vertex - the Python call overhead dominates on dense meshes, and 1/64
+    # resolution is far finer than this cost term needs.
+    rest = np.flatnonzero(weights > 0.0)
+    if rest.size:
+        buckets = np.clip(np.rint(weights[rest] * 64.0).astype(np.int32), 1, 64)
+        for b in np.unique(buckets):
+            group.add(rest[buckets == b].tolist(), float(b) / 64.0, 'REPLACE')
+    return group
+
+
+def decimate_to_target(obj, target_tris, vertex_group=None, vertex_group_factor=1.0):
+    """Finishing pass with Blender's own Decimate (Collapse) for the case
+    where meshoptimizer stops well above the requested triangle count.
+
+    Attribute-aware simplification treats UV/normal/material seams as hard
+    boundaries and gets stuck; the meshopt ways around that (Permissive)
+    collapse ACROSS those seams, which snaps UVs to one side of the seam and
+    smears the texture. Blender's Decimate interpolates UVs along the
+    collapsed edge instead, so pushing the last stretch with it keeps the
+    texture readable at very low polycounts.
+
+    Runs after Merge by Distance on purpose: the welded mesh stores UVs per
+    face-corner, which is what lets Decimate interpolate them. Returns the
+    resulting triangle count."""
+    me = obj.data
+    current = mesh_tri_count(me)
+    if target_tris < 1 or current <= target_tris:
+        return current
+
+    _select_only(obj)
+    mod = obj.modifiers.new("SF_DecimateFinish", 'DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.ratio = target_tris / current
+    mod.use_collapse_triangulate = True
+    if vertex_group is not None:
+        mod.vertex_group = vertex_group
+        # Blender clamps this at 1000; our 0-1 strength maps so that the 0.5
+        # default lands on Blender's own default factor of 1.0.
+        mod.vertex_group_factor = min(1000.0, max(0.0, vertex_group_factor) * 2.0)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    return mesh_tri_count(obj.data)
+
+
 def merge_by_distance(obj, threshold):
     """Weld coincident-position vertices back together. Safe for UV seams:
     Blender stores UV/normals per face-corner (loop), not per vertex, so
@@ -464,7 +581,9 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                      normal_weight, uv_weight, name, do_merge, merge_threshold,
                      use_vertex_update=False, protect_uv_seams=False,
                      use_vcolor_importance=False, importance_weight=0.5,
-                     preprune_threshold=0.0, use_multi_uv=False):
+                     preprune_threshold=0.0, use_multi_uv=False,
+                     use_decimate_finish=False, importance_source='VCOLOR',
+                     importance_vgroup=""):
     eval_obj, me = get_evaluated_mesh(context, src)
     new_mat_ids = None
     new_colors = None
@@ -488,9 +607,19 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             elif slot_i < len(me.materials):
                 mat = me.materials[slot_i]
             materials.append(mat.original if mat is not None else None)
+        # The group is picked by name, never guessed, so on a rigged mesh the
+        # bone weight groups are simply left alone.
+        vgroup_weights = None
+        if use_attributes and use_vcolor_importance and importance_source == 'VGROUP':
+            vgroup_weights = read_vertex_group_weights(eval_obj, me, importance_vgroup)
+            if vgroup_weights is None:
+                print(f"[LOD Generator] Importance vertex group "
+                      f"'{importance_vgroup}' not found on {src.name} - "
+                      f"simplifying without an importance mask.")
         if use_attributes:
             (positions, normals, uvs, indices, uv_info, mat_ids,
-             importance, has_color, colors, color_info) = mesh_to_attribute_buffers(me, use_multi_uv)
+             importance, has_color, colors, color_info) = mesh_to_attribute_buffers(
+                me, use_multi_uv, vgroup_weights)
             has_uv = bool(uv_info["names"])
             colors_arg = colors if color_info["names"] else None
             target_index_count = max(3, int(len(indices) * ratio))
@@ -505,6 +634,7 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
 
             if preprune_threshold > 0.0:
                 indices = native_simplify_prune(positions, indices, preprune_threshold)
+            options = apply_sparse_option(options, positions, indices)
 
             if use_vertex_update:
                 upd_pos, simplified, upd_norm, upd_uv, result_error = native_simplify_with_update(
@@ -513,8 +643,10 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     normal_weight, uv_weight, vertex_lock=vertex_lock,
                     importance=imp_arg, importance_weight=imp_w,
                 )
-                new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors = compact_after_simplify(
-                    upd_pos, simplified, upd_norm, upd_uv if has_uv else None, mat_ids, colors_arg)
+                (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
+                 new_importance) = compact_after_simplify(
+                    upd_pos, simplified, upd_norm, upd_uv if has_uv else None, mat_ids,
+                    colors_arg, imp_arg)
             else:
                 simplified, result_error = native_simplify_attributes(
                     positions, normals, uvs, has_uv, indices,
@@ -522,17 +654,21 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     normal_weight, uv_weight, vertex_lock=vertex_lock,
                     importance=imp_arg, importance_weight=imp_w,
                 )
-                new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors = compact_after_simplify(
-                    positions, simplified, normals, uvs if has_uv else None, mat_ids, colors_arg)
+                (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
+                 new_importance) = compact_after_simplify(
+                    positions, simplified, normals, uvs if has_uv else None, mat_ids,
+                    colors_arg, imp_arg)
         else:
             positions, indices = mesh_to_position_buffers(me)
             target_index_count = max(3, int(len(indices) * ratio))
             target_index_count -= target_index_count % 3
             if preprune_threshold > 0.0:
                 indices = native_simplify_prune(positions, indices, preprune_threshold)
+            options = apply_sparse_option(options, positions, indices)
             simplified, result_error = native_simplify_positions(
                 positions, indices, target_index_count, target_error, options)
-            new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors = compact_after_simplify(positions, simplified)
+            (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
+             new_importance) = compact_after_simplify(positions, simplified)
     finally:
         eval_obj.to_mesh_clear()
 
@@ -559,15 +695,36 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
         obj.matrix_parent_inverse = src.matrix_parent_inverse.copy()
     obj.matrix_world = src.matrix_world.copy()
 
+    # Built before Merge by Distance so the weights are indexed by the same
+    # vertices we just wrote; welding merges the weights along with the
+    # vertices, so the group stays valid for the Decimate pass afterwards.
+    importance_group = None
+    if use_decimate_finish and new_importance is not None:
+        try:
+            importance_group = build_decimate_importance_group(obj, new_importance)
+        except Exception as exc:
+            print(f"[LOD Generator] Importance group for Decimate failed on "
+                  f"{obj.name}: {exc}")
+
     if do_merge:
         try:
             merge_by_distance(obj, merge_threshold)
         except Exception as exc:
             print(f"[LOD Generator] Merge by Distance failed on {obj.name}: {exc}")
 
+    # After Merge by Distance: the welded mesh keeps per-corner UVs, which is
+    # what lets Decimate interpolate them instead of snapping across seams.
+    if use_decimate_finish:
+        try:
+            after_tris = decimate_to_target(
+                obj, target_index_count // 3,
+                vertex_group=importance_group.name if importance_group else None,
+                vertex_group_factor=importance_weight)
+        except Exception as exc:
+            print(f"[LOD Generator] Decimate finish failed on {obj.name}: {exc}")
+        if importance_group is not None:
+            # Internal artifact (it holds inverted importance) - don't leave
+            # it on the finished LOD.
+            obj.vertex_groups.remove(importance_group)
+
     return obj, before_tris, after_tris, result_error
-
-
-# ---------------------------------------------------------------------------
-# Properties
-# ---------------------------------------------------------------------------
