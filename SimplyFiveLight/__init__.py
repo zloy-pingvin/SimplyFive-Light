@@ -4,10 +4,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 zloy_pingvin
 
+# Single source of truth for the version, kept at module level. Blender 4.2+
+# treats blender_manifest.toml as authoritative and DELETES bl_info from the
+# module when the add-on is installed as an extension - so any runtime read of
+# bl_info['version'] (e.g. in the Preferences draw()) raises NameError on every
+# redraw. Read VERSION instead; never bl_info at runtime.
+VERSION = (1, 2, 9)
+
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
     "author": "zloy_pingvin",
-    "version": (1, 2, 7),
+    "version": VERSION,
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
@@ -208,7 +215,7 @@ class LodGenAddonPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text=f"Add-on version: {'.'.join(str(x) for x in bl_info['version'])}")
+        layout.label(text=f"Add-on version: {'.'.join(str(x) for x in VERSION)}")
 
         box = layout.box()
         if native_available():
