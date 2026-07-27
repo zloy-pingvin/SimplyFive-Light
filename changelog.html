@@ -140,10 +140,21 @@
   <!-- ============================================================= -->
 
   <article class="rel">
+    <h2 id="v1-2-9">
+      <span class="ver">v1.2.9</span>
+      <span class="date">2026-07-…</span>
+      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
+    </h2>
+    <ul class="changes">
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Preferences panel crash on Extensions-Platform installs.</b> Installed as an extension (Blender 4.2+), opening the add-on’s Preferences threw a <code>NameError</code> on every redraw — Blender 4.2+ drops <code>bl_info</code> from the module in favour of <code>blender_manifest.toml</code>, but the panel still read <code>bl_info['version']</code>. It now reads a module-level <code>VERSION</code> constant. If your Preferences page was crashing, 1.2.9 fixes it.</span><span data-l="ru"><b>Падение панели Preferences при установке как расширение.</b> При установке как extension (Blender 4.2+) открытие Preferences аддона вызывало <code>NameError</code> на каждой перерисовке — Blender 4.2+ убирает <code>bl_info</code> из модуля в пользу <code>blender_manifest.toml</code>, а панель всё ещё читала <code>bl_info['version']</code>. Теперь читается модульная константа <code>VERSION</code>. Если у вас падала страница Preferences — 1.2.9 это чинит.</span></li>
+      <li data-tier="pro"><span class="k k-chg">Changed</span><span data-l="en"><b>“Recalculate + Sharp Loops” normals — improved.</b> Now also realigns flat panels whose smoothing was disrupted after chamfer simplification, via the new <b>Flatten Panels</b> function.</span><span data-l="ru"><b>Нормали «Recalculate + Sharp Loops» — улучшены.</b> Теперь также выравнивают плоские панели, чьё сглаживание нарушилось после упрощения фасок, через новую функцию <b>Flatten Panels</b>.</span><span class="badge-pro">Pro</span></li>
+    </ul>
+  </article>
+
+  <article class="rel">
     <h2 id="v1-2-7">
       <span class="ver">v1.2.7</span>
       <span class="date">2026-07-26</span>
-      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
     </h2>
     <ul class="changes">
       <li><span class="k k-add">Added</span><span data-l="en"><b>Finish with Decimate.</b> meshoptimizer alone stalls well above your target when UV / material / normal seams block it (ask for 1%, get 8%). The new finishing pass takes those aggressive LODs down to the exact target percentage — interpolating UVs along collapsed edges instead of smearing textures across seams.</span><span data-l="ru"><b>Доводка через Decimate.</b> Один meshoptimizer застревает заметно выше цели, когда мешают швы UV / материалов / нормалей (просишь 1% — получаешь 8%). Новый финишный проход доводит агрессивные LOD до точного целевого процента, интерполируя UV вдоль схлопнутых рёбер, а не размазывая текстуры через швы.</span></li>
