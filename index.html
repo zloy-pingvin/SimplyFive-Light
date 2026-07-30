@@ -161,6 +161,14 @@
   }
   .ver-row .ver-link:hover { color: var(--accent-2); border-color: var(--accent-2); }
 
+  sup.fn { font-size: 0.7em; line-height: 0; }
+  sup.fn a { color: var(--accent-2); text-decoration: none; font-weight: 700; }
+  sup.fn a:hover { text-decoration: underline; }
+  .whyfoot { flex-basis: 100%; width: 100%; margin: 0; padding-top: 0.9rem; border-top: 1px solid var(--line-soft); font-size: 0.78rem; line-height: 1.5; color: var(--text-dim); opacity: 0.85; }
+  .whyfoot a { color: var(--accent-2); text-decoration: none; }
+  .whyfoot a:hover { text-decoration: underline; }
+  :target { scroll-margin-top: 80px; }
+
   /* ---------- LOD VISUAL ---------- */
   .lod-stage {
     margin-top: clamp(2rem, 5vw, 3.2rem);
@@ -328,7 +336,7 @@
     </div>
     <div class="reveal">
       <p class="lede" data-i18n-html="why.body">
-        Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn't touch it — it
+        Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn't touch it<sup class="fn"><a href="#whyFoot">*</a></sup> — it
         relies on the <b>meshoptimizer</b> algorithms instead, which preserve <b>normals</b> and
         <b>UV&nbsp;unwrapping</b> far better while they reduce geometry. Quality comparable to well-known
         commercial tools, it's <b>fast</b>, and everything runs <b>locally</b>: no internet connection, no
@@ -422,6 +430,7 @@
       <a href="docs.html" data-link="docs" data-i18n="nav.docs">User Manual</a>
     </nav>
     <span class="small" data-i18n-html="foot.small">Supports Blender 5.0+ · Powered by <a href="https://github.com/zeux/meshoptimizer" target="_blank" rel="noopener">meshoptimizer</a> (by Arseny Kapoulkine, MIT License) · © 2026 SimplyFive</span>
+    <p class="whyfoot" id="whyFoot" data-i18n-html="why.foot"></p>
   </div>
 </footer>
 
@@ -443,7 +452,8 @@
       "lod.label": "Line Up LODs — one silhouette, five LODs",
       "why.eyebrow": "Why it's different",
       "why.head": "It never uses the Decimate modifier's algorithms.",
-      "why.body": 'Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn\'t touch it — it relies on the <b>meshoptimizer</b> algorithms instead, which preserve <b>normals</b> and <b>UV&nbsp;unwrapping</b> far better while they reduce geometry. Quality comparable to well-known commercial tools, it\'s <b>fast</b>, and everything runs <b>locally</b>: no internet connection, no questionable licenses like the ones similar products ship with.',
+      "why.body": 'Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn\'t touch it<sup class="fn"><a href="#whyFoot">*</a></sup> — it relies on the <b>meshoptimizer</b> algorithms instead, which preserve <b>normals</b> and <b>UV&nbsp;unwrapping</b> far better while they reduce geometry. Quality comparable to well-known commercial tools, it\'s <b>fast</b>, and everything runs <b>locally</b>: no internet connection, no questionable licenses like the ones similar products ship with.',
+      "why.foot": '<b>*</b> Almost never — since <b>1.2.7</b> the optional <b>“Very Aggressive Alternative”</b> mode (<b>Finish with Decimate</b>) runs a short Decimate pass only at the very end, to reach the exact target triangle&nbsp;% when meshoptimizer stalls on UV / normal seams. Every other mode stays pure meshoptimizer. <a href="changelog.html#v1-2-7">See the changelog →</a>',
       "chip.shading": "Shading-aware", "chip.uv": "UV-preserving", "chip.local": "100% local", "chip.fast": "Fast",
       "feat.eyebrow": "What SimplyFive can do",
       "feat.head": "Ten controls that treat a LOD like a mesh, not a mistake.",
@@ -482,7 +492,8 @@
       "lod.label": "Line Up LODs — один силуэт, пять LOD",
       "why.eyebrow": "В чём отличие",
       "why.head": "Он не использует алгоритмы модификатора Decimate.",
-      "why.body": 'Большинство LOD-аддонов для Blender опираются на <b>модификатор Decimate</b>. SimplyFive его не использует — вместо этого он полагается на алгоритмы <b>meshoptimizer</b>, которые заметно лучше сохраняют <b>нормали</b> и <b>UV-развёртку</b> при упрощении геометрии. Качество на уровне известных коммерческих инструментов, работает <b>быстро</b> и полностью <b>локально</b>: без интернета и без сомнительных лицензий, как у похожих продуктов.',
+      "why.body": 'Большинство LOD-аддонов для Blender опираются на <b>модификатор Decimate</b>. SimplyFive его не использует<sup class="fn"><a href="#whyFoot">*</a></sup> — вместо этого он полагается на алгоритмы <b>meshoptimizer</b>, которые заметно лучше сохраняют <b>нормали</b> и <b>UV-развёртку</b> при упрощении геометрии. Качество на уровне известных коммерческих инструментов, работает <b>быстро</b> и полностью <b>локально</b>: без интернета и без сомнительных лицензий, как у похожих продуктов.',
+      "why.foot": '<b>*</b> Почти никогда — начиная с <b>1.2.7</b> опциональный режим <b>«Very Aggressive Alternative»</b> (<b>Finish with Decimate</b>) в самом конце запускает короткий проход Decimate, чтобы попасть в точный целевой&nbsp;% треугольников, когда meshoptimizer застревает на швах UV / нормалей. Все остальные режимы — чистый meshoptimizer. <a href="changelog.html#v1-2-7">Смотреть чейнджлог →</a>',
       "chip.shading": "Сохраняет шейдинг", "chip.uv": "Бережёт UV", "chip.local": "100% локально", "chip.fast": "Быстро",
       "feat.eyebrow": "Что умеет SimplyFive",
       "feat.head": "Десять инструментов, для которых LOD — полноценный меш, а не компромисс.",
