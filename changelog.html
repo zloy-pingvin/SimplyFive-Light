@@ -140,10 +140,28 @@
   <!-- ============================================================= -->
 
   <article class="rel">
+    <h2 id="v1-3-2">
+      <span class="ver">v1.3.2</span>
+      <span class="date">2026-08-09</span>
+      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
+    </h2>
+    <img src="media/fast_lods.gif" alt="Fast LOD generation" loading="lazy" style="display:block;width:100%;max-width:560px;border:1px solid var(--line);border-radius:var(--radius);margin:.3em 0 .9em;">
+    <ul class="changes">
+      <li><span class="k k-chg">Faster</span><span data-l="en"><b>4–6× faster generation</b> — even more on flat-shaded meshes. (505k-tri scan: 7.5s → 2.0s. 22M-tri scan: 20 min → 77s.)</span><span data-l="ru"><b>Генерация в 4–6× быстрее</b> — на плоско-затенённых мешах ещё сильнее. (Скан 505 тыс. тр.: 7.5с → 2.0с. Скан 22 млн тр.: 20 мин → 77с.)</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Blender crash</b> caused by assertions in the library (a modal box on Windows, a silent crash on Linux/macOS).</span><span data-l="ru"><b>Падение Blender</b> из-за ассертов в библиотеке (модальное окно на Windows, тихое падение на Linux/macOS).</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Simplification of flat-shaded meshes</b> — most noticeable on scans. Smooth-shaded meshes are unaffected.</span><span data-l="ru"><b>Упрощение плоско-затенённых мешей</b> — заметнее всего на сканах. Смуф-шейдед меши не затронуты.</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Edit Mode memory leak</b> — removing an object that was in Edit Mode left its edit mesh behind.</span><span data-l="ru"><b>Утечка памяти в Edit Mode</b> — удаление объекта, бывшего в режиме правки, оставляло его edit-сетку.</span></li>
+      <li><span class="k k-add">Added</span><span data-l="en"><b>Return to Edit Mode</b> (Preferences, on by default) — puts you back on the object you were editing, including after a failed generation.</span><span data-l="ru"><b>Return to Edit Mode</b> (в Preferences, включено по умолчанию) — возвращает в режим правки того объекта, который вы редактировали, в том числе после неудачной генерации.</span></li>
+      <li data-tier="pro"><span class="k k-add">Added</span><span data-l="en"><b>Voxel remesh</b> (experimental in meshoptimizer).</span><span data-l="ru"><b>Voxel remesh</b> (экспериментально в meshoptimizer).</span><span class="badge-pro">Pro</span></li>
+      <li data-tier="pro"><span class="k k-add">Added</span><span data-l="en"><b>“Recalculate + Smooth” normals mode</b> (experimental in meshoptimizer).</span><span data-l="ru"><b>Режим нормалей «Recalculate + Smooth»</b> (экспериментально в meshoptimizer).</span><span class="badge-pro">Pro</span></li>
+      <li data-tier="pro"><span class="k k-fix">Fixed</span><span data-l="en"><b>Build from Previous LOD</b> chaining fix.</span><span data-l="ru">Исправление цепочки <b>Build from Previous LOD</b>.</span><span class="badge-pro">Pro</span></li>
+    </ul>
+  </article>
+
+  <article class="rel">
     <h2 id="v1-2-9">
       <span class="ver">v1.2.9</span>
       <span class="date">2026-07-27</span>
-      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
     </h2>
     <ul class="changes">
       <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Preferences panel crash on Extensions-Platform installs.</b> Installed as an extension (Blender 4.2+), opening the add-on’s Preferences threw a <code>NameError</code> on every redraw — Blender 4.2+ drops <code>bl_info</code> from the module in favour of <code>blender_manifest.toml</code>, but the panel still read <code>bl_info['version']</code>. It now reads a module-level <code>VERSION</code> constant. If your Preferences page was crashing, 1.2.9 fixes it.</span><span data-l="ru"><b>Падение панели Preferences при установке как расширение.</b> При установке как extension (Blender 4.2+) открытие Preferences аддона вызывало <code>NameError</code> на каждой перерисовке — Blender 4.2+ убирает <code>bl_info</code> из модуля в пользу <code>blender_manifest.toml</code>, а панель всё ещё читала <code>bl_info['version']</code>. Теперь читается модульная константа <code>VERSION</code>. Если у вас падала страница Preferences — 1.2.9 это чинит.</span></li>
