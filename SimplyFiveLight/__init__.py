@@ -9,7 +9,7 @@
 # module when the add-on is installed as an extension - so any runtime read of
 # bl_info['version'] (e.g. in the Preferences draw()) raises NameError on every
 # redraw. Read VERSION instead; never bl_info at runtime.
-VERSION = (1, 2, 9)
+VERSION = (1, 3, 2)
 
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
@@ -66,6 +66,44 @@ def get_lod_suffix():
     except Exception:
         return DEFAULT_LOD_SUFFIX
     return suffix if suffix else DEFAULT_LOD_SUFFIX
+
+
+def suspend_edit_mode(context):
+    """Drop to Object Mode for the duration of a generation and report which
+    object was being edited. Mandatory, not cosmetic: regeneration removes the
+    old object, and removing one that is still in Edit Mode leaks its edit
+    mesh. Returns the object's name, or None."""
+    obj = context.object
+    if obj is None or obj.mode != 'EDIT':
+        return None
+    name = obj.name
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return name
+
+
+def resume_edit_mode(context, name):
+    """Re-enter Edit Mode on that object once it has been rebuilt, if the
+    preference asks for it. The object is looked up by name because
+    regeneration replaced it with a new datablock."""
+    if not name:
+        return
+    try:
+        if not bpy.context.preferences.addons[__name__].preferences.restore_edit_mode:
+            return
+    except Exception:
+        return
+    obj = bpy.data.objects.get(name)
+    if obj is None or obj.type != 'MESH' or obj.name not in context.view_layer.objects:
+        return
+    if obj.hide_get() or not obj.visible_get():
+        return
+    for other in context.view_layer.objects:
+        other.select_set(other is obj)
+    context.view_layer.objects.active = obj
+    try:
+        bpy.ops.object.mode_set(mode='EDIT')
+    except RuntimeError as exc:
+        print(f"[LOD Generator] Could not return to Edit Mode on {name}: {exc}")
 
 
 def lod_name(base, index):
@@ -206,6 +244,12 @@ def _on_mode_change(self, context):
 class LodGenAddonPreferences(bpy.types.AddonPreferences):
     bl_idname = __name__
 
+    restore_edit_mode: bpy.props.BoolProperty(
+        name="Return to Edit Mode", default=True,
+        description="Generating leaves Edit Mode, since regeneration replaces "
+                    "the object. With this on, Edit Mode is re-entered on it "
+                    "afterwards")
+
     lod_suffix: bpy.props.StringProperty(
         name="LOD Name Suffix", default=DEFAULT_LOD_SUFFIX,
         description="Text between the base object name and the LOD index "
@@ -229,6 +273,11 @@ class LodGenAddonPreferences(bpy.types.AddonPreferences):
         box = layout.box()
         box.label(text="Naming", icon='SORTALPHA')
         box.prop(self, "lod_suffix")
+
+        layout.separator()
+        box = layout.box()
+        box.label(text="Behavior", icon='PREFERENCES')
+        box.prop(self, "restore_edit_mode")
 
         layout.separator()
         layout.label(text="Credits", icon='INFO')
@@ -489,6 +538,11 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
 
     def execute(self, context):
         _lineup_restore(context)
+        # Leaving Edit Mode is mandatory, not cosmetic: regeneration removes
+        # the old object, and removing one still in Edit Mode leaks its edit
+        # mesh. Restored on every exit path, so a failed generation doesn't
+        # silently drop the user out of Edit Mode either.
+        editing = suspend_edit_mode(context)
         props = context.scene.lodgen_light_props
         base, lod0 = resolve_lod0(context.active_object)
         created = []
@@ -501,6 +555,7 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
 
         if not created:
             self.report({'ERROR'}, "No LODs were generated.")
+            resume_edit_mode(context, editing)
             return {'CANCELLED'}
 
         for o, _, _, _ in created:
@@ -509,6 +564,7 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
 
         summary = ", ".join(f"{o.name} ({b}->{a} tris, err {e:.4f})" for o, b, a, e in created)
         self.report({'INFO'}, f"Generated {len(created)} LOD(s): {summary}")
+        resume_edit_mode(context, editing)
         return {'FINISHED'}
 
 
@@ -526,16 +582,19 @@ class LODGENLIGHT_OT_generate_single(bpy.types.Operator):
 
     def execute(self, context):
         _lineup_restore(context)
+        editing = suspend_edit_mode(context)   # see LODGENLIGHT_OT_generate
         props = context.scene.lodgen_light_props
         base, lod0 = resolve_lod0(context.active_object)
         slot = getattr(props, f"lod_{self.lod_index}")
         obj, before, after, err = generate_one_lod(context, lod0, base, self.lod_index, slot, props)
         if obj is None:
             self.report({'ERROR'}, f"LOD {self.lod_index} failed - see System Console.")
+            resume_edit_mode(context, editing)
             return {'CANCELLED'}
         obj.select_set(True)
         context.view_layer.objects.active = obj
         self.report({'INFO'}, f"{obj.name}: {before} -> {after} tris, error {err:.4f}")
+        resume_edit_mode(context, editing)
         return {'FINISHED'}
 
 

@@ -55,7 +55,52 @@ def read_vertex_group_weights(obj, me, group_name):
     return weights
 
 
-def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None):
+def _lum(rgba):
+    """Luminance of an (N, 4) RGBA block.
+
+    Accumulated in float64 and rounded once, like the per-element version
+    this replaces: in float32 the last bit differs on a few vertices, and the
+    importance mask is a cost weight, so that decides ties inside
+    meshoptimizer and moves the result by a triangle or two."""
+    return (0.2126 * rgba[:, 0].astype(np.float64)
+            + 0.7152 * rgba[:, 1].astype(np.float64)
+            + 0.0722 * rgba[:, 2].astype(np.float64))
+
+
+def _read_color_layer(layer):
+    """A color attribute's values as (N, 4) float32, one row per element of
+    its own domain (loops for CORNER, vertices for POINT)."""
+    buf = np.empty(len(layer.data) * 4, dtype=np.float32)
+    layer.data.foreach_get("color", buf)
+    return buf.reshape(-1, 4)
+
+
+def source_is_flat_shaded(me):
+    """True when every face is flat and there are no custom split normals.
+
+    On such a mesh a corner normal is just its own face normal, so keying the
+    dedup on it splits practically every corner into its own vertex - on a
+    22M-triangle scan, 66M vertices instead of 11M, which costs both the
+    buffer build and meshoptimizer itself several times over for information
+    the geometry already carries.
+
+    Attributes are matched while iterating rather than by name lookup, for the
+    reason spelled out in deselect_mesh_elements."""
+    sharp = None
+    for attr in me.attributes:
+        if attr.name == "custom_normal":
+            return False
+        if attr.name == "sharp_face":
+            sharp = attr
+    if sharp is None or not len(me.polygons) or len(sharp.data) != len(me.polygons):
+        return False
+    flags = np.empty(len(sharp.data), dtype=bool)
+    sharp.data.foreach_get("value", flags)
+    return bool(flags.all())
+
+
+def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
+                               key_normals=True):
     """Per-loop dedup, like a GPU vertex buffer: every unique
     (vertex, normal, uv, material) becomes its own entry. meshoptimizer's
     simplifyWithAttributes is specifically designed to handle the resulting
@@ -67,10 +112,10 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None):
     simplification automatically (protect them via vertex_lock when using
     Permissive, since that mode explicitly allows crossing such boundaries).
 
-    Also captures a per-vertex 'importance' scalar (0-1) from the active
-    color attribute, if present: luminance of the vertex color. Higher =
-    more important = should be simplified less. Not part of the dedup key
-    (it's guidance, not topology).
+    Also captures a per-vertex 'importance' scalar (0-1): vgroup_weights when
+    a vertex group is used as the mask, else the luminance of the active
+    color attribute if present. Higher = more important = should be
+    simplified less. Not part of the dedup key (it's guidance, not topology).
 
     use_multi_uv=False: only the active UV layer is captured, other channels
     are dropped. True: every UV layer is captured - all of them go into the
@@ -93,11 +138,6 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None):
         "active_render": next(
             (k for k, layer in enumerate(uv_layers) if layer.active_render), 0),
     }
-    uv_data = [layer.data for layer in uv_layers]
-    verts = me.vertices
-    loops = me.loops
-    polygons = me.polygons
-
     color_layer = me.color_attributes.active_color if me.color_attributes else None
     color_per_loop = color_layer is not None and color_layer.domain == 'CORNER'
     color_per_point = color_layer is not None and color_layer.domain == 'POINT'
@@ -114,66 +154,103 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None):
         "render_index": max(me.color_attributes.render_color_index, 0) if color_layers else 0,
     }
 
-    def _lum(rgba):
-        return 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
+    # Every buffer is pulled out of Blender whole (foreach_get) and the dedup
+    # runs as a sort, not as a Python loop over corners: at a few million
+    # triangles the per-corner RNA access alone costs tens of seconds.
+    n_corners = len(me.loop_triangles) * 3
+    n_loops = len(me.loops)
 
-    lookup = {}
-    positions, normals, uvs, mat_ids, importance, colors = [], [], [], [], [], []
-    indices = np.empty(len(me.loop_triangles) * 3, dtype=np.uint32)
+    corner_vert = np.empty(n_corners, dtype=np.int32)
+    me.loop_triangles.foreach_get("vertices", corner_vert)
+    corner_loop = np.empty(n_corners, dtype=np.int32)
+    me.loop_triangles.foreach_get("loops", corner_loop)
+    tri_poly = np.empty(len(me.loop_triangles), dtype=np.int32)
+    me.loop_triangles.foreach_get("polygon_index", tri_poly)
 
-    idx_out = 0
-    for tri in me.loop_triangles:
-        mat_id = polygons[tri.polygon_index].material_index
-        for vi, li in zip(tri.vertices, tri.loops):
-            n = loops[li].normal
-            if uv_data:
-                uv = []
-                for data in uv_data:
-                    lu, lv = data[li].uv
-                    uv.append(lu)
-                    uv.append(lv)
-                key = (vi, round(n[0], 5), round(n[1], 5), round(n[2], 5),
-                       *(round(c, 5) for c in uv), mat_id)
-            else:
-                uv = (0.0, 0.0)
-                key = (vi, round(n[0], 5), round(n[1], 5), round(n[2], 5), mat_id)
+    poly_mat = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("material_index", poly_mat)
+    corner_mat = np.repeat(poly_mat[tri_poly], 3)
 
-            if vgroup_weights is not None:
-                imp = vgroup_weights[vi]
-            elif color_per_loop:
-                imp = _lum(color_layer.data[li].color)
-            elif color_per_point:
-                imp = _lum(color_layer.data[vi].color)
-            else:
-                imp = 0.0
+    co = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
 
-            new_i = lookup.get(key)
-            if new_i is None:
-                new_i = len(positions)
-                lookup[key] = new_i
-                positions.append(tuple(verts[vi].co))
-                normals.append((n[0], n[1], n[2]))
-                uvs.append(tuple(uv))
-                mat_ids.append(mat_id)
-                importance.append(imp)
-                col_vals = []
-                for layer in color_layers:
-                    elem = layer.data[li] if layer.domain == 'CORNER' else layer.data[vi]
-                    col_vals.extend(elem.color)
-                colors.append(tuple(col_vals))
-            indices[idx_out] = new_i
-            idx_out += 1
+    loop_normal = np.empty(n_loops * 3, dtype=np.float32)
+    me.corner_normals.foreach_get("vector", loop_normal)
+    corner_normal = loop_normal.reshape(-1, 3)[corner_loop]
+
+    if uv_layers:
+        layer_uvs = []
+        for layer in uv_layers:
+            flat = np.empty(n_loops * 2, dtype=np.float32)
+            layer.uv.foreach_get("vector", flat)
+            layer_uvs.append(flat.reshape(-1, 2)[corner_loop])
+        corner_uv = np.concatenate(layer_uvs, axis=1)
+        uv_cols = corner_uv.shape[1]
+    else:
+        corner_uv = np.zeros((n_corners, 2), dtype=np.float32)
+        uv_cols = 0
+
+    # The dedup key as integers - values quantized to 1e-5, the same tolerance
+    # the previous tuple key rounded to. Columns are vertex index, corner
+    # normal, every captured UV, material id. key_normals=False drops the
+    # normal columns for a flat-shaded source (see source_is_flat_shaded).
+    key = np.empty((n_corners, 2 + uv_cols + (3 if key_normals else 0)), dtype=np.int64)
+    key[:, 0] = corner_vert
+    col = 1
+    if key_normals:
+        key[:, col:col + 3] = np.rint(corner_normal.astype(np.float64) * 1e5)
+        col += 3
+    if uv_cols:
+        key[:, col:col + uv_cols] = np.rint(corner_uv.astype(np.float64) * 1e5)
+    key[:, -1] = corner_mat
+
+    # lexsort reads its keys last-to-first, so the reversed view makes column
+    # 0 the primary one; equal keys then sit next to each other.
+    order = np.lexsort(key.T[::-1])
+    sorted_key = key[order]
+    new_group = np.ones(n_corners, dtype=bool)
+    np.any(sorted_key[1:] != sorted_key[:-1], axis=1, out=new_group[1:])
+    indices = np.empty(n_corners, dtype=np.int64)
+    indices[order] = np.cumsum(new_group) - 1
+    first = order[new_group]
+
+    # Renumber from sort order back to first-encounter order, so the buffers
+    # come out in the same order the loop triangles reference them.
+    appearance = np.argsort(first, kind='stable')
+    rank = np.empty_like(appearance)
+    rank[appearance] = np.arange(len(appearance))
+    indices = rank[indices].astype(np.uint32)
+    first = first[appearance]
+
+    first_vert = corner_vert[first]
+    first_loop = corner_loop[first]
+
+    if vgroup_weights is not None:
+        importance = vgroup_weights[first_vert]
+    elif color_per_loop or color_per_point:
+        src = first_loop if color_per_loop else first_vert
+        importance = _lum(_read_color_layer(color_layer)[src])
+    else:
+        importance = np.zeros(len(first), dtype=np.float32)
+
+    if color_layers:
+        colors = np.concatenate(
+            [_read_color_layer(layer)[first_loop if layer.domain == 'CORNER' else first_vert]
+             for layer in color_layers], axis=1)
+    else:
+        colors = np.zeros((len(first), 0), dtype=np.float32)
 
     return (
-        np.array(positions, dtype=np.float32),
-        np.array(normals, dtype=np.float32),
-        np.array(uvs, dtype=np.float32),
+        co[first_vert],
+        corner_normal[first],
+        corner_uv[first],
         indices,
         uv_info,
-        np.array(mat_ids, dtype=np.int32),
-        np.array(importance, dtype=np.float32),
+        corner_mat[first].astype(np.int32),
+        importance.astype(np.float32, copy=False),
         vgroup_weights is not None or color_layer is not None,
-        np.array(colors, dtype=np.float32),
+        colors.astype(np.float32, copy=False),
         color_info,
     )
 
@@ -264,33 +341,47 @@ def native_simplify_positions(positions, indices, target_index_count, target_err
     return destination[:count], result_error.value
 
 
+def _position_groups(positions):
+    """Group vertices by position quantized to 1e-5, without a Python dict of
+    rounded tuples: at tens of millions of vertices that loop alone runs for
+    minutes. Returns the sort order, the group-start mask over it, and each
+    sorted element's group representative. lexsort is stable, so the
+    representative is the group's lowest original index - what iterating in
+    index order used to pick."""
+    q = np.rint(np.asarray(positions, dtype=np.float64) * 1e5).astype(np.int64)
+    order = np.lexsort((q[:, 2], q[:, 1], q[:, 0]))
+    sorted_q = q[order]
+    starts = np.ones(len(order), dtype=bool)
+    if len(order) > 1:
+        np.any(sorted_q[1:] != sorted_q[:-1], axis=1, out=starts[1:])
+    group = np.cumsum(starts) - 1
+    return order, starts, group, order[starts][group]
+
+
 def build_seam_protect_lock(positions, uvs, has_uv, mat_ids=None):
     """Equivalent to meshopt_generatePositionRemap + comparing attributes per
     the docs' 'protect specific seams' recipe - group vertices by position,
     flag any vertex whose UV or material ID differs from another vertex
     sharing its position. Used with Permissive so the simplifier can collapse
     freely everywhere except across the seams/material boundaries we
-    explicitly protect."""
-    groups = {}
-    for i, p in enumerate(positions):
-        key = (round(float(p[0]), 5), round(float(p[1]), 5), round(float(p[2]), 5))
-        groups.setdefault(key, []).append(i)
+    explicitly protect.
 
+    A vertex alone at its position can never differ from the group's
+    representative, so single-vertex groups drop out on their own - no need to
+    filter them the way the per-group loop this replaces did."""
     lock = np.zeros(len(positions), dtype=np.uint8)
-    for idxs in groups.values():
-        if len(idxs) < 2:
-            continue
-        base_uv = uvs[idxs[0]] if has_uv else None
-        base_mat = mat_ids[idxs[0]] if mat_ids is not None else None
-        for i in idxs:
-            differs = False
-            if has_uv and not np.allclose(uvs[i], base_uv, atol=1e-5):
-                differs = True
-            if mat_ids is not None and mat_ids[i] != base_mat:
-                differs = True
-            if differs:
-                lock[idxs[0]] |= native_build.MESHOPT_VERTEX_PROTECT
-                lock[i] |= native_build.MESHOPT_VERTEX_PROTECT
+    if len(positions) == 0:
+        return lock
+    order, _, _, rep = _position_groups(positions)
+    differs = np.zeros(len(order), dtype=bool)
+    if has_uv:
+        # np.allclose's tolerances, matching the per-vertex call this replaces
+        same = np.isclose(uvs[order], uvs[rep], rtol=1e-5, atol=1e-5)
+        np.logical_or(differs, ~np.all(same, axis=1), out=differs)
+    if mat_ids is not None:
+        np.logical_or(differs, mat_ids[order] != mat_ids[rep], out=differs)
+    lock[order[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
+    lock[rep[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
     return lock
 
 
@@ -511,12 +602,48 @@ def merge_by_distance(obj, threshold):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def deselect_mesh_elements(me):
+    """A freshly built LOD arrives selected, so Edit Mode would open on it
+    that way. Runs last, after the mesh is final.
+
+    Done by dropping the .select_* attributes, which is where the selection
+    lives: absent means nothing is selected, and Blender rebuilds them on
+    demand. The obvious vertices/edges/polygons.foreach_set("select", ...)
+    instead reads a bool array as ints and can fault on a dense mesh.
+
+    The attributes are matched while iterating, never looked up by name:
+    attributes.get(".select_edge") reports the data type of a different
+    attribute in Blender 5.0, and acting on that would be a mistake."""
+    doomed = [attr for attr in me.attributes
+              if attr.name in {".select_vert", ".select_edge", ".select_poly"}]
+    for attr in doomed:
+        me.attributes.remove(attr)
+
+
 def build_object_from_buffers(name, collections, positions, faces, normals=None, uvs=None,
                                materials=None, mat_ids=None, uv_info=None,
                                colors=None, color_info=None):
     mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(positions.tolist(), [], faces.tolist())
+    # Filled through foreach_set rather than from_pydata: the latter needs the
+    # buffers as Python lists, which on a multi-million-triangle LOD costs more
+    # than everything else here put together. Triangles only, so the polygon
+    # offsets are a fixed stride of 3.
+    n_loops = len(faces) * 3
+    mesh.vertices.add(len(positions))
+    mesh.loops.add(n_loops)
+    mesh.polygons.add(len(faces))
+    mesh.vertices.foreach_set("co", np.ascontiguousarray(positions, dtype=np.float32).ravel())
+    mesh.loops.foreach_set("vertex_index", np.ascontiguousarray(faces, dtype=np.int32).ravel())
+    mesh.polygons.foreach_set("loop_start", np.arange(0, n_loops, 3, dtype=np.int32))
+    # Faces must be marked flat explicitly: from_pydata did it implicitly, while
+    # building the mesh directly leaves them smooth. The custom split normals
+    # written below override this for shading, so it does not change how a LOD
+    # looks here - but the state is real and must match what from_pydata left.
+    mesh.polygons.foreach_set("use_smooth", np.zeros(len(faces), dtype=np.int32))
     mesh.update(calc_edges=True)
+
+    # Corner -> source vertex, for writing the per-corner layers below.
+    corner_vert = np.ascontiguousarray(faces, dtype=np.int64).ravel()
 
     if uvs is not None:
         # uvs is (N, 2*num_layers); uv_info carries the source layers' names
@@ -526,9 +653,8 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
         for k in range(num_layers):
             layer_name = names[k] if k < len(names) else f"UVMap.{k:03d}"
             uv_layer = mesh.uv_layers.new(name=layer_name)
-            for loop in mesh.loops:
-                u, v = uvs[loop.vertex_index, 2 * k:2 * k + 2]
-                uv_layer.data[loop.index].uv = (float(u), float(v))
+            flat = np.ascontiguousarray(uvs[corner_vert, 2 * k:2 * k + 2], dtype=np.float32)
+            uv_layer.uv.foreach_set("vector", flat.ravel())
         if uv_info:
             render_idx = uv_info["active_render"]
             if 0 <= render_idx < len(mesh.uv_layers):
@@ -553,8 +679,12 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
 
     if normals is not None and hasattr(mesh, "normals_split_custom_set_from_vertices"):
         try:
-            mesh.normals_split_custom_set_from_vertices([tuple(n) for n in normals.tolist()])
+            mesh.normals_split_custom_set_from_vertices(
+                np.ascontiguousarray(normals, dtype=np.float32).tolist())
         except Exception:
+            # Blender rejects custom normals on degenerate results (zero-area
+            # or unreferenced verts after an aggressive collapse). The mesh is
+            # still valid - it just keeps face normals.
             pass
 
     if materials:
@@ -562,13 +692,12 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
             mesh.materials.append(mat)
 
     if mat_ids is not None and len(mesh.materials) > 1:
-        max_index = len(mesh.materials) - 1
-        for poly in mesh.polygons:
-            # All 3 corners of a surviving triangle share the same material
-            # ID by construction (mesh_to_attribute_buffers bakes it into the
-            # vertex dedup key), so the first vertex's ID is authoritative.
-            mid = int(mat_ids[poly.vertices[0]])
-            poly.material_index = max(0, min(mid, max_index))
+        # All 3 corners of a surviving triangle share the same material ID by
+        # construction (mesh_to_attribute_buffers bakes it into the vertex
+        # dedup key), so the first vertex's ID is authoritative.
+        per_face = np.asarray(mat_ids, dtype=np.int32)[np.asarray(faces, dtype=np.int64)[:, 0]]
+        mesh.polygons.foreach_set(
+            "material_index", np.clip(per_face, 0, len(mesh.materials) - 1))
 
     obj = bpy.data.objects.new(name, mesh)
     for collection in collections:
@@ -616,10 +745,14 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                 print(f"[LOD Generator] Importance vertex group "
                       f"'{importance_vgroup}' not found on {src.name} - "
                       f"simplifying without an importance mask.")
+        # A fully flat source carries no normal information the geometry does
+        # not already have, so it neither enters the dedup key nor comes back
+        # out as custom split normals - the LOD stays flat, like the source.
+        flat_source = use_attributes and source_is_flat_shaded(me)
         if use_attributes:
             (positions, normals, uvs, indices, uv_info, mat_ids,
              importance, has_color, colors, color_info) = mesh_to_attribute_buffers(
-                me, use_multi_uv, vgroup_weights)
+                me, use_multi_uv, vgroup_weights, key_normals=not flat_source)
             has_uv = bool(uv_info["names"])
             colors_arg = colors if color_info["names"] else None
             target_index_count = max(3, int(len(indices) * ratio))
@@ -680,7 +813,9 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     collections = list(src.users_collection) or [context.collection]
     obj = build_object_from_buffers(
         name, collections, new_pos, new_faces,
-        new_norm, new_uv,
+        # A flat source gets no custom split normals back (see flat_source):
+        # the LOD stays flat, exactly like the mesh it came from.
+        new_norm if not flat_source else None, new_uv,
         materials=materials if any(m is not None for m in materials) else None,
         mat_ids=new_mat_ids, uv_info=uv_info,
         colors=new_colors, color_info=color_info,
@@ -726,5 +861,9 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             # Internal artifact (it holds inverted importance) - don't leave
             # it on the finished LOD.
             obj.vertex_groups.remove(importance_group)
+
+    # Last, once the mesh is final: Merge by Distance selects everything to do
+    # its work, so clearing the selection any earlier would be undone.
+    deselect_mesh_elements(obj.data)
 
     return obj, before_tris, after_tris, result_error

@@ -18,6 +18,10 @@ TRANSLATIONS_RU = {
     "Multiple UV Channels": "Несколько UV-каналов",
     "Mode": "Режим",
     "Naming": "Именование",
+    "Behavior": "Поведение",
+    "Return to Edit Mode": "Возвращаться в режим редактирования",
+    "Generating leaves Edit Mode, since regeneration replaces the object. With this on, Edit Mode is re-entered on it afterwards":
+        "Генерация выходит из режима редактирования, так как перегенерация заменяет объект. С этой опцией режим редактирования включается на нём обратно",
     "LOD Name Suffix": "Суффикс имён LOD",
     "Text between the base object name and the LOD index (e.g. '_lod_' gives 'Cube_lod_1'). Changing it does not rename existing LODs - objects named with the old suffix are no longer recognized as part of a LOD family":
         "Текст между базовым именем объекта и номером LOD (например, '_lod_' даёт 'Cube_lod_1'). Изменение не переименовывает существующие LOD — объекты со старым суффиксом перестают распознаваться как часть семейства LOD",
