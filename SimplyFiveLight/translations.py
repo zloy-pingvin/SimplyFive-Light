@@ -68,6 +68,12 @@ TRANSLATIONS_RU = {
     "Like Aggressive with very low attribute weights and a higher Target Error. meshopt only - may stop above the requested percentage":
         "Как Aggressive, но с очень низкими весами атрибутов и более высоким Target Error. Только meshopt — может остановиться выше запрошенного процента",
     "Very Aggressive Alternative": "Очень агрессивный (альтернативный)",
+    "Recalculate + Smooth": "Пересчитать + сгладить",
+    "Crease Angle": "Угол складки",
+    "Edges whose faces meet at a sharper angle than this stay hard when normals are recalculated. Lower keeps more edges crisp; higher smooths more of them together":
+        "Рёбра, чьи грани сходятся под углом острее этого, остаются жёсткими при пересчёте нормалей. Меньше — больше рёбер сохранит резкость; больше — сильнее сглаживает их вместе",
+    "Discard the source normals and generate new ones from the simplified geometry (meshoptimizer, experimental). Edges meeting at a sharp angle stay hard. At very low triangle counts the source normals no longer match the geometry, which is what makes shading look dented":
+        "Отбросить нормали исходника и построить новые по упрощённой геометрии (meshoptimizer, экспериментально). Рёбра, сходящиеся под острым углом, остаются жёсткими. На очень низком поликаунте нормали исходника перестают соответствовать геометрии — отсюда и вмятины в затенении",
     "Very Aggressive plus a Decimate pass down to the exact percentage, with UV seams protected. Which of the two works better depends on the model":
         "Очень агрессивный плюс проход Decimate до точного процента, с защитой UV-швов. Какой из двух лучше — зависит от модели",
     "Quality preset for this LOD: how aggressively it is simplified. Careful keeps the most detail; Very Aggressive pushes the triangle count much lower":

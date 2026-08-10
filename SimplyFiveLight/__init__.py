@@ -9,13 +9,13 @@
 # module when the add-on is installed as an extension - so any runtime read of
 # bl_info['version'] (e.g. in the Preferences draw()) raises NameError on every
 # redraw. Read VERSION instead; never bl_info at runtime.
-VERSION = (1, 3, 2)
+VERSION = (1, 3, 5)
 
 bl_info = {
     "name": "SimplyFive Light (lod generator)",
     "author": "zloy_pingvin",
     "version": VERSION,
-    "blender": (5, 0, 0),
+    "blender": (4, 2, 0),
     "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
         "Generate LOD meshes using meshoptimizer "
@@ -30,9 +30,10 @@ from . import translations
 from . import native_build
 from .mesh_ops import (
     MESHOPT_LOCK_BORDER, MESHOPT_ERROR_ABSOLUTE, MESHOPT_PRUNE,
-    simplify_object,
+    SMOOTH_CREASE_ANGLE, simplify_object,
 )
 from .native_build import native_available, try_load_native
+import math
 import re
 
 try:
@@ -300,6 +301,11 @@ MODE_ITEMS = [
      "UV seams protected. Which of the two works better depends on the model"),
 ]
 
+# Modes that offer the Recalculate + Smooth checkbox. Only the very aggressive
+# ones: that is where the source normals stop matching the geometry. On a gentle
+# LOD recalculating them would throw away shading that is still correct.
+SMOOTH_NORMALS_MODES = {'VERY_AGGRESSIVE', 'VERY_AGGRESSIVE_ALT'}
+
 
 def make_lod_slot_class(class_name, default_percent, default_mode):
     """Each LOD slot gets its own PropertyGroup subclass so it can start with
@@ -341,6 +347,26 @@ def make_lod_slot_class(class_name, default_percent, default_mode):
             name="UV Weight", default=preset['uv_weight'], min=0.0, soft_max=1.0, max=100.0),
         'preprune_threshold': bpy.props.FloatProperty(
             name="Pre-prune", default=preset['preprune_threshold'], min=0.0, max=0.2, precision=3),
+        # Deliberately NOT in PRESET_FIELDS: no mode sets it, so switching Mode
+        # leaves the user's choice alone. Only offered on the modes in
+        # SMOOTH_NORMALS_MODES, and gated again at generation time - a setting
+        # the panel hides must not keep applying.
+        'use_smooth_normals': bpy.props.BoolProperty(
+            name="Recalculate + Smooth", default=False,
+            description="Discard the source normals and generate new ones from "
+                        "the simplified geometry (meshoptimizer, experimental). "
+                        "Edges meeting at a sharp angle stay hard. At very low "
+                        "triangle counts the source normals no longer match the "
+                        "geometry, which is what makes shading look dented"),
+        # Exposed, unlike the relaxation strength: the right crease angle depends
+        # on the model, and Light has no other way to change it. Also outside
+        # PRESET_FIELDS, so switching Mode keeps the user's value.
+        'smooth_crease_angle': bpy.props.FloatProperty(
+            name="Crease Angle", default=SMOOTH_CREASE_ANGLE,
+            min=0.0, max=math.pi, subtype='ANGLE',
+            description="Edges whose faces meet at a sharper angle than this "
+                        "stay hard when normals are recalculated. Lower keeps "
+                        "more edges crisp; higher smooths more of them together"),
         'show_details': bpy.props.BoolProperty(
             name="Details", default=False,
             description="Show the advanced per-LOD settings for this LOD"),
@@ -515,6 +541,11 @@ def generate_one_lod(context, lod0, base, i, slot, props):
             use_decimate_finish=slot.use_decimate_finish,
             importance_source=props.importance_source,
             importance_vgroup=props.importance_vgroup,
+            # Gated on the mode, not just on the checkbox: the panel only shows
+            # it for these modes, and a hidden setting must not still apply.
+            use_smooth_normals=(slot.use_smooth_normals
+                                and slot.simplify_mode in SMOOTH_NORMALS_MODES),
+            smooth_crease_angle=slot.smooth_crease_angle,
         )
     except Exception as exc:
         print(f"[LOD Generator] LOD {i} failed: {exc}")
@@ -547,11 +578,14 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
         base, lod0 = resolve_lod0(context.active_object)
         created = []
 
+        failed = []
         for i in range(1, props.lod_count + 1):
             slot = getattr(props, f"lod_{i}")
             obj, before, after, err = generate_one_lod(context, lod0, base, i, slot, props)
             if obj is not None:
                 created.append((obj, before, after, err))
+            else:
+                failed.append(i)
 
         if not created:
             self.report({'ERROR'}, "No LODs were generated.")
@@ -563,7 +597,14 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
         context.view_layer.objects.active = created[0][0]
 
         summary = ", ".join(f"{o.name} ({b}->{a} tris, err {e:.4f})" for o, b, a, e in created)
-        self.report({'INFO'}, f"Generated {len(created)} LOD(s): {summary}")
+        # A skipped level must not read as success: the rest generated fine, but
+        # that LOD is now missing and its previous object was already removed.
+        if failed:
+            self.report({'WARNING'},
+                        f"LOD {', '.join(str(i) for i in failed)} not generated "
+                        f"- see System Console. Generated {len(created)}: {summary}")
+        else:
+            self.report({'INFO'}, f"Generated {len(created)} LOD(s): {summary}")
         resume_edit_mode(context, editing)
         return {'FINISHED'}
 
@@ -819,6 +860,12 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
             gen_op.lod_index = i
 
             box.prop(slot, "simplify_mode")
+            # Only where it does something; generation checks the same set, so a
+            # value left over from another mode cannot apply unseen.
+            if slot.simplify_mode in SMOOTH_NORMALS_MODES:
+                box.prop(slot, "use_smooth_normals")
+                if slot.use_smooth_normals:
+                    box.prop(slot, "smooth_crease_angle")
             if SHOW_PRO_TEASER:
                 box.prop(slot, "show_details",
                          icon='TRIA_DOWN' if slot.show_details else 'TRIA_RIGHT', emboss=False)

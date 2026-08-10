@@ -7,6 +7,7 @@ import time - before try_load_native() has actually set it.
 
 import bpy
 import ctypes
+import math
 import numpy as np
 
 from . import native_build
@@ -16,6 +17,12 @@ from .native_build import c_float_p, c_uint_p, c_ubyte_p
 # Temporary vertex group used to feed the importance mask to Blender's
 # Decimate (Finish with Decimate); always removed again after the modifier.
 DECIMATE_IMPORTANCE_GROUP = "SF_DecimateImportance"
+
+
+class SimplifyEmpty(Exception):
+    """The simplifier returned no triangles at all. Prune deletes whole
+    disconnected components once the error budget covers them, so a large
+    Target Error can take the last one with it."""
 
 
 def get_evaluated_mesh(context, obj):
@@ -86,6 +93,12 @@ def source_is_flat_shaded(me):
 
     Attributes are matched while iterating rather than by name lookup, for the
     reason spelled out in deselect_mesh_elements."""
+    # has_custom_normals, not a 'custom_normal' entry in me.attributes: in 4.2
+    # they sit in a legacy layer and never show up there, so scanning the
+    # attributes calls a flat mesh that carries them flat and drops them - a
+    # hard-surface model then arrives with no shading at all, silently.
+    if getattr(me, "has_custom_normals", False):
+        return False
     sharp = None
     for attr in me.attributes:
         if attr.name == "custom_normal":
@@ -97,6 +110,33 @@ def source_is_flat_shaded(me):
     flags = np.empty(len(sharp.data), dtype=bool)
     sharp.data.foreach_get("value", flags)
     return bool(flags.all())
+
+
+def repack_flat_custom_normals(me):
+    """Re-pack a flat source's custom split normals against a smooth base.
+
+    They are stored relative to each corner's computed normal, which on a flat
+    face is the face normal - a different one per corner. One intended normal
+    then decodes to a slightly different vector per corner, so the dedup key
+    sees almost as many vertices as corners and nothing can collapse: measured
+    on a flat-shaded scan, 1439312 keyed vertices against 254012 positions, and
+    the LOD came back the size of the source. Reading the decoded normals and
+    writing them back over a smooth base costs under 0.6 degrees anywhere.
+
+    Only for the mesh from to_mesh(), which is a copy - never the user's own.
+    Returns True when it changed anything."""
+    if not getattr(me, "has_custom_normals", False) or not len(me.polygons):
+        return False
+    smooth = np.empty(len(me.polygons), dtype=bool)
+    me.polygons.foreach_get("use_smooth", smooth)
+    if smooth.all():
+        return False
+    keep = np.empty(len(me.loops) * 3, dtype=np.float32)
+    me.corner_normals.foreach_get("vector", keep)
+    me.polygons.foreach_set("use_smooth", np.ones(len(me.polygons), dtype=np.int32))
+    me.update()
+    me.normals_split_custom_set(keep.reshape(-1, 3))
+    return True
 
 
 def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
@@ -341,14 +381,14 @@ def native_simplify_positions(positions, indices, target_index_count, target_err
     return destination[:count], result_error.value
 
 
-def _position_groups(positions):
-    """Group vertices by position quantized to 1e-5, without a Python dict of
+def _position_groups(positions, scale=1e5):
+    """Group vertices by position quantized to 1/scale, without a Python dict of
     rounded tuples: at tens of millions of vertices that loop alone runs for
     minutes. Returns the sort order, the group-start mask over it, and each
     sorted element's group representative. lexsort is stable, so the
     representative is the group's lowest original index - what iterating in
     index order used to pick."""
-    q = np.rint(np.asarray(positions, dtype=np.float64) * 1e5).astype(np.int64)
+    q = np.rint(np.asarray(positions, dtype=np.float64) * scale).astype(np.int64)
     order = np.lexsort((q[:, 2], q[:, 1], q[:, 0]))
     sorted_q = q[order]
     starts = np.ones(len(order), dtype=bool)
@@ -583,6 +623,170 @@ def decimate_to_target(obj, target_tris, vertex_group=None, vertex_group_factor=
     return mesh_tri_count(obj.data)
 
 
+# Above this many distinct positions in one search cell the threshold is
+# comparable to the mesh's own detail, enumerating pairs turns quadratic, and
+# the job goes to merge_by_distance instead.
+_WELD_MAX_CELL = 64
+
+
+class WeldTooDense(Exception):
+    pass
+
+
+def _distance_pairs(pos, threshold):
+    """Index pairs closer than threshold, via 8 grids of cell size 2*threshold
+    shifted half a cell in each combination of axes. Per axis two close
+    coordinates share a cell in at least one of the two offsets, so nothing is
+    missed; a single grid misses any pair straddling a cell edge."""
+    cell_size = 2.0 * threshold
+    scaled = np.asarray(pos, dtype=np.float64) / cell_size
+    found = []
+    for offset in np.ndindex(2, 2, 2):
+        cell = np.floor(scaled + np.array(offset) * 0.5).astype(np.int64)
+        # Cell coordinates hashed into one key: sorting one column is much
+        # cheaper than lexsort over three, and that sort is the whole cost
+        # here. A collision only costs time - the distance test drops the pair.
+        key = ((cell[:, 0].astype(np.uint64) * np.uint64(73856093))
+               ^ (cell[:, 1].astype(np.uint64) * np.uint64(19349663))
+               ^ (cell[:, 2].astype(np.uint64) * np.uint64(83492791)))
+        order = np.argsort(key, kind='stable')
+        sorted_key = key[order]
+        starts = np.ones(len(order), dtype=bool)
+        if len(order) > 1:
+            np.not_equal(sorted_key[1:], sorted_key[:-1], out=starts[1:])
+        sizes = np.diff(np.append(np.flatnonzero(starts), len(order)))
+        biggest = int(sizes.max(initial=0))
+        if biggest > _WELD_MAX_CELL:
+            raise WeldTooDense(f"{biggest} positions within {threshold} of each other")
+        if biggest < 2:
+            continue
+        # Single-point cells pair with nothing and are nearly all of them;
+        # dropping them keeps the strides below off the full vertex count.
+        group = np.cumsum(starts) - 1
+        crowded = np.repeat(sizes > 1, sizes)
+        sub_order, sub_group = order[crowded], group[crowded]
+        # Every pair inside a cell, as (element, element d places later in the
+        # same cell) for each stride - no Python loop over the cells.
+        for stride in range(1, biggest):
+            same = sub_group[:-stride] == sub_group[stride:]
+            if not same.any():
+                continue
+            a, b = sub_order[:-stride][same], sub_order[stride:][same]
+            close = np.linalg.norm(pos[a] - pos[b], axis=1) <= threshold
+            if close.any():
+                found.append(np.stack([a[close], b[close]], axis=1))
+    if not found:
+        return np.zeros((0, 2), dtype=np.int64)
+    # A pair the offsets found more than once can come back either way round.
+    return np.unique(np.sort(np.concatenate(found), axis=1), axis=0)
+
+
+def _union_labels(labels, pairs):
+    """Merge the label of each pair, then renumber the survivors from 0. The
+    loop runs over pairs, which are few; resolving the chains afterwards is
+    pointer jumping over the whole label array, since a Python find() per label
+    is minutes on a dense mesh."""
+    parent = np.arange(int(labels.max()) + 1, dtype=np.int64)
+
+    def root(x):
+        while parent[x] != x:
+            x = parent[x]
+        return x
+
+    for a, b in pairs:
+        ra, rb = root(labels[a]), root(labels[b])
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+    # A parent always points at a smaller label, so this settles in a few
+    # passes however the pairs chained together.
+    while True:
+        nxt = parent[parent]
+        if np.array_equal(nxt, parent):
+            break
+        parent = nxt
+    _, renumbered = np.unique(parent, return_inverse=True)
+    return renumbered[labels]
+
+
+def weld_position_buffers(positions, faces, threshold):
+    """Merge by Distance on the buffers, before the mesh is built. One vertex
+    survives per group of positions within the threshold; corner_attr keeps the
+    corner->vertex map, so UVs, normals and material IDs stay per corner and
+    nothing is averaged. Degenerate triangles are dropped, duplicate faces are
+    not. Returns (positions, faces, corner_attr, rep) or None when nothing is
+    coincident; rep maps each survivor back to its original vertex."""
+    faces = np.asarray(faces)
+    if len(positions) == 0 or len(faces) == 0:
+        return None
+    order, starts, group, _ = _position_groups(positions, scale=1e9)
+    rep = order[starts]
+    labels = np.empty(len(positions), dtype=np.int64)
+    labels[order] = group
+
+    if threshold > 0.0 and len(rep) > 1:
+        pairs = _distance_pairs(positions[rep], float(threshold))
+        if len(pairs):
+            labels = _union_labels(labels, rep[pairs])
+            # Survivor per group is again its lowest index, and the labels come
+            # back renumbered, so first-occurrence order is the new numbering.
+            _, rep = np.unique(labels, return_index=True)
+
+    if len(rep) == len(positions):
+        return None
+    welded = labels[faces].astype(np.uint32)
+    keep = ((welded[:, 0] != welded[:, 1]) & (welded[:, 1] != welded[:, 2])
+            & (welded[:, 0] != welded[:, 2]))
+    return (positions[rep], welded[keep],
+            faces[keep].ravel().astype(np.uint32), rep)
+
+
+# Recalculate + Smooth is a single checkbox in Light, so its two knobs are
+# constants rather than settings - the values Pro's presets ship with. Crease is
+# in radians: edges meeting sharper than this stay hard.
+SMOOTH_CREASE_ANGLE = math.radians(45.0)
+SMOOTH_RELAX = 1.5
+
+
+def generate_normals(obj, crease_angle=SMOOTH_CREASE_ANGLE, smoothing=SMOOTH_RELAX):
+    """Per-corner normals from meshoptimizer as custom split normals; False
+    when the bundled library lacks the export. Edges above crease_angle stay
+    hard; smoothing is a Laplacian relaxation weighted by normal alignment, so
+    creases survive it. This replaces the source normals rather than adding to
+    them, which is the point on a very aggressive LOD - the source ones no
+    longer match the geometry that is left."""
+    fn = native_build.generate_normals_fn()
+    if fn is None:
+        return False
+    me = obj.data
+    me.calc_loop_triangles()
+    tri_count = len(me.loop_triangles)
+    vert_count = len(me.vertices)
+    if tri_count == 0 or vert_count == 0:
+        return False
+
+    indices = np.empty(tri_count * 3, dtype=np.uint32)
+    me.loop_triangles.foreach_get("vertices", indices)
+    loops = np.empty(tri_count * 3, dtype=np.int32)
+    me.loop_triangles.foreach_get("loops", loops)
+    positions = np.empty(vert_count * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", positions)
+
+    result = np.empty(tri_count * 3 * 3, dtype=np.float32)
+    fn(result.ctypes.data_as(c_float_p),
+       indices.ctypes.data_as(c_uint_p), tri_count * 3,
+       positions.ctypes.data_as(c_float_p), vert_count, 12,
+       ctypes.c_float(crease_angle), ctypes.c_float(smoothing))
+
+    # One normal per triangle corner comes back; Blender wants one per loop.
+    # loop_triangles carries the mapping, so this holds for ngons too.
+    loop_normals = np.zeros((len(me.loops), 3), dtype=np.float32)
+    loop_normals[loops] = result.reshape(-1, 3)
+    # A flat-shaded face ignores custom normals, so make sure none are left.
+    me.polygons.foreach_set("use_smooth", np.ones(len(me.polygons), dtype=np.int32))
+    me.normals_split_custom_set(loop_normals.tolist())
+    return True
+
+
 def merge_by_distance(obj, threshold):
     """Weld coincident-position vertices back together. Safe for UV seams:
     Blender stores UV/normals per face-corner (loop), not per vertex, so
@@ -622,7 +826,7 @@ def deselect_mesh_elements(me):
 
 def build_object_from_buffers(name, collections, positions, faces, normals=None, uvs=None,
                                materials=None, mat_ids=None, uv_info=None,
-                               colors=None, color_info=None):
+                               colors=None, color_info=None, corner_attr=None):
     mesh = bpy.data.meshes.new(name)
     # Filled through foreach_set rather than from_pydata: the latter needs the
     # buffers as Python lists, which on a multi-million-triangle LOD costs more
@@ -635,15 +839,16 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
     mesh.vertices.foreach_set("co", np.ascontiguousarray(positions, dtype=np.float32).ravel())
     mesh.loops.foreach_set("vertex_index", np.ascontiguousarray(faces, dtype=np.int32).ravel())
     mesh.polygons.foreach_set("loop_start", np.arange(0, n_loops, 3, dtype=np.int32))
-    # Faces must be marked flat explicitly: from_pydata did it implicitly, while
-    # building the mesh directly leaves them smooth. The custom split normals
-    # written below override this for shading, so it does not change how a LOD
-    # looks here - but the state is real and must match what from_pydata left.
-    mesh.polygons.foreach_set("use_smooth", np.zeros(len(faces), dtype=np.int32))
+    # Smooth exactly when custom split normals follow: they are packed against
+    # each corner's computed normal, and on a flat face that base differs per
+    # corner - such a LOD reads back split at nearly every corner.
+    mesh.polygons.foreach_set(
+        "use_smooth", np.full(len(faces), normals is not None, dtype=np.int32))
     mesh.update(calc_edges=True)
 
-    # Corner -> source vertex, for writing the per-corner layers below.
-    corner_vert = np.ascontiguousarray(faces, dtype=np.int64).ravel()
+    # Corner -> attribute row, for writing the per-corner layers below.
+    corner_vert = np.ascontiguousarray(
+        faces if corner_attr is None else corner_attr, dtype=np.int64).ravel()
 
     if uvs is not None:
         # uvs is (N, 2*num_layers); uv_info carries the source layers' names
@@ -677,10 +882,17 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
         if 0 <= active_idx < len(mesh.color_attributes):
             mesh.color_attributes.active_color_index = active_idx
 
-    if normals is not None and hasattr(mesh, "normals_split_custom_set_from_vertices"):
+    if normals is not None:
         try:
-            mesh.normals_split_custom_set_from_vertices(
-                np.ascontiguousarray(normals, dtype=np.float32).tolist())
+            if corner_attr is not None:
+                # Welded vertices carry several normals, so per corner, and
+                # against final topology. The array goes in as itself:
+                # .tolist() here costs gigabytes of small Python lists.
+                mesh.normals_split_custom_set(
+                    np.ascontiguousarray(normals, dtype=np.float32)[corner_vert])
+            elif hasattr(mesh, "normals_split_custom_set_from_vertices"):
+                mesh.normals_split_custom_set_from_vertices(
+                    np.ascontiguousarray(normals, dtype=np.float32).tolist())
         except Exception:
             # Blender rejects custom normals on degenerate results (zero-area
             # or unreferenced verts after an aggressive collapse). The mesh is
@@ -695,7 +907,7 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
         # All 3 corners of a surviving triangle share the same material ID by
         # construction (mesh_to_attribute_buffers bakes it into the vertex
         # dedup key), so the first vertex's ID is authoritative.
-        per_face = np.asarray(mat_ids, dtype=np.int32)[np.asarray(faces, dtype=np.int64)[:, 0]]
+        per_face = np.asarray(mat_ids, dtype=np.int32)[corner_vert.reshape(-1, 3)[:, 0]]
         mesh.polygons.foreach_set(
             "material_index", np.clip(per_face, 0, len(mesh.materials) - 1))
 
@@ -712,7 +924,8 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                      use_vcolor_importance=False, importance_weight=0.5,
                      preprune_threshold=0.0, use_multi_uv=False,
                      use_decimate_finish=False, importance_source='VCOLOR',
-                     importance_vgroup=""):
+                     importance_vgroup="", use_smooth_normals=False,
+                     smooth_crease_angle=SMOOTH_CREASE_ANGLE):
     eval_obj, me = get_evaluated_mesh(context, src)
     new_mat_ids = None
     new_colors = None
@@ -745,6 +958,13 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                 print(f"[LOD Generator] Importance vertex group "
                       f"'{importance_vgroup}' not found on {src.name} - "
                       f"simplifying without an importance mask.")
+        # Flat faces plus custom normals is what an FBX/OBJ import usually
+        # produces, and the dedup key cannot survive it - see the function.
+        if use_attributes and repack_flat_custom_normals(me):
+            print(f"[LOD Generator] {src.name} is flat-shaded and carries custom "
+                  f"split normals - re-packing them on the working copy so the "
+                  f"vertex dedup can merge (the source itself is not touched)")
+
         # A fully flat source carries no normal information the geometry does
         # not already have, so it neither enters the dedup key nor comes back
         # out as custom split normals - the LOD stays flat, like the source.
@@ -805,8 +1025,39 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     finally:
         eval_obj.to_mesh_clear()
 
+    # On the buffers, not on the built object: the mesh is born welded, so the
+    # custom normals below are written against topology that no longer moves.
+    # merge_on_object is the fallback for the one case the buffer weld
+    # declines - geometry too dense for its threshold.
+    corner_attr = None
+    merge_on_object = False
+    if do_merge and new_faces.shape[0]:
+        try:
+            welded = weld_position_buffers(new_pos, new_faces, merge_threshold)
+        except Exception as exc:
+            print(f"[LOD Generator] Buffer weld gave up on {name} ({exc}) - "
+                  f"welding with the Edit Mode operator instead")
+            welded, merge_on_object = None, True
+        if welded is not None:
+            new_pos, new_faces, corner_attr, weld_rep = welded
+            if new_colors is not None:
+                new_colors = new_colors[weld_rep]
+            if new_importance is not None:
+                new_importance = new_importance[weld_rep]
+
     before_tris = len(indices) // 3
     after_tris = new_faces.shape[0]
+
+    # Nothing left: adding an object with no triangles used to happen silently.
+    # Checked on the result, not on the settings - if it isn't zero, nothing
+    # about the behavior changes.
+    if new_faces.shape[0] == 0:
+        if len(indices) < 3:
+            raise SimplifyEmpty(f"{name}: the source mesh has no triangles")
+        raise SimplifyEmpty(
+            f"{name}: simplification returned 0 triangles. Lower Target Error "
+            f"(Prune removes whole disconnected parts once the error budget "
+            f"covers them) or use a mode without Prune")
 
     # The LOD lands in the source object's own collection(s), not the active
     # one, so the scene hierarchy of the family matches the original.
@@ -814,11 +1065,14 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     obj = build_object_from_buffers(
         name, collections, new_pos, new_faces,
         # A flat source gets no custom split normals back (see flat_source):
-        # the LOD stays flat, exactly like the mesh it came from.
-        new_norm if not flat_source else None, new_uv,
+        # the LOD stays flat, exactly like the mesh it came from. Under
+        # Recalculate + Smooth the source normals are replaced wholesale after
+        # the topology is final, so carrying them here would be wasted work.
+        new_norm if not (flat_source or use_smooth_normals) else None, new_uv,
         materials=materials if any(m is not None for m in materials) else None,
         mat_ids=new_mat_ids, uv_info=uv_info,
         colors=new_colors, color_info=color_info,
+        corner_attr=corner_attr,
     )
     # Mirror the source's place in the hierarchy: same parent (if any),
     # same world transform either way.
@@ -833,34 +1087,53 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # Built before Merge by Distance so the weights are indexed by the same
     # vertices we just wrote; welding merges the weights along with the
     # vertices, so the group stays valid for the Decimate pass afterwards.
-    importance_group = None
+    # Kept as a NAME, not as the VertexGroup pointer: applying the Decimate
+    # modifier below rebuilds the object's data and leaves such a pointer
+    # dangling, so reading .name off it afterwards returns a truncated string
+    # and removing it raises "DeformGroup '<garbage>' not in object".
+    importance_group_name = None
     if use_decimate_finish and new_importance is not None:
         try:
-            importance_group = build_decimate_importance_group(obj, new_importance)
+            importance_group_name = build_decimate_importance_group(
+                obj, new_importance).name
         except Exception as exc:
             print(f"[LOD Generator] Importance group for Decimate failed on "
                   f"{obj.name}: {exc}")
 
-    if do_merge:
+    if merge_on_object:
         try:
             merge_by_distance(obj, merge_threshold)
         except Exception as exc:
             print(f"[LOD Generator] Merge by Distance failed on {obj.name}: {exc}")
 
-    # After Merge by Distance: the welded mesh keeps per-corner UVs, which is
-    # what lets Decimate interpolate them instead of snapping across seams.
+    # After the weld: the mesh keeps per-corner UVs, which is what lets Decimate
+    # interpolate them instead of snapping across seams.
     if use_decimate_finish:
         try:
             after_tris = decimate_to_target(
                 obj, target_index_count // 3,
-                vertex_group=importance_group.name if importance_group else None,
+                vertex_group=importance_group_name,
                 vertex_group_factor=importance_weight)
         except Exception as exc:
             print(f"[LOD Generator] Decimate finish failed on {obj.name}: {exc}")
-        if importance_group is not None:
-            # Internal artifact (it holds inverted importance) - don't leave
-            # it on the finished LOD.
-            obj.vertex_groups.remove(importance_group)
+        if importance_group_name:
+            # Internal artifact (it holds inverted importance) - don't leave it
+            # on the finished LOD. Looked up again by name, and inside the try:
+            # losing the cleanup must not lose the whole LOD.
+            try:
+                stale = obj.vertex_groups.get(importance_group_name)
+                if stale is not None:
+                    obj.vertex_groups.remove(stale)
+            except Exception as exc:
+                print(f"[LOD Generator] Could not remove the temporary "
+                      f"importance group on {obj.name}: {exc}")
+
+    # After the Decimate finish, so the generator sees the topology that is
+    # actually left - recalculating before it would describe a mesh that no
+    # longer exists.
+    if use_smooth_normals and not generate_normals(obj, smooth_crease_angle):
+        print(f"[LOD Generator] meshoptimizer in this build cannot generate "
+              f"normals - {obj.name} keeps the normals it was built with")
 
     # Last, once the mesh is final: Merge by Distance selects everything to do
     # its work, so clearing the selection any earlier would be undone.

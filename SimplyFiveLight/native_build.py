@@ -57,6 +57,21 @@ def _configure_signatures(lib):
     ]
 
 
+def generate_normals_fn():
+    """meshopt_generateNormals, or None on a library built before it existed.
+    Configured on first use rather than in _configure_signatures, which must
+    keep working with such an older bundled build."""
+    if _native_lib is None or not hasattr(_native_lib, "meshopt_generateNormals"):
+        return None
+    fn = _native_lib.meshopt_generateNormals
+    fn.restype = None
+    fn.argtypes = [
+        c_float_p, c_uint_p, ctypes.c_size_t, c_float_p, ctypes.c_size_t,
+        ctypes.c_size_t, ctypes.c_float, ctypes.c_float,
+    ]
+    return fn
+
+
 def _bundled_dll_path():
     """The .dll/.so/.dylib placed right next to this .py file. Matches by glob
     rather than an exact name, since a build's output can carry a timestamp

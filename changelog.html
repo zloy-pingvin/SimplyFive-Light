@@ -140,10 +140,25 @@
   <!-- ============================================================= -->
 
   <article class="rel">
+    <h2 id="v1-3-5">
+      <span class="ver">v1.3.5</span>
+      <span class="date">2026-08-10</span>
+      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
+    </h2>
+    <ul class="changes">
+      <li><span class="k k-add">Added</span><span data-l="en"><b>Blender 4.2 is now fully supported</b> — one archive for 4.2–5.0. Verified on 4.2, 4.5.11 LTS and 5.0.1.</span><span data-l="ru"><b>Blender 4.2 теперь полностью поддерживается</b> — один архив для 4.2–5.0. Проверено на 4.2, 4.5.11 LTS и 5.0.1.</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>Shading of imported models.</b> Their normals were sometimes read as flat shading with custom normals, which caused serious trouble when simplifying the model.</span><span data-l="ru"><b>Шейдинг импортированных моделей.</b> Иногда нормали считывались как плоский шейдинг с кастомными нормалями, и это вызывало большие проблемы для упрощения модели.</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>An empty LOD could be added silently.</b> At a high Target Error, Prune can delete every disconnected part of a mesh. Such a level is no longer created, and the report says which ones were skipped.</span><span data-l="ru"><b>Пустой LOD мог добавиться молча.</b> При высоком Target Error Prune способен удалить все несвязанные части меша. Такой уровень больше не создаётся, а в отчёте видно, какие уровни пропущены.</span></li>
+      <li><span class="k k-fix">Fixed</span><span data-l="en"><b>The importance mask on a <i>Very Aggressive Alternative</i> level lost that level entirely.</b> The mask reaches the Decimate pass through a temporary vertex group, and cleaning that group up afterwards raised an error which took the finished mesh with it.</span><span data-l="ru"><b>Маска важности на уровне <i>Very Aggressive Alternative</i> теряла этот уровень целиком.</b> Маска передаётся в проход Decimate через временную вертекс-группу, и её уборка вызывала ошибку, уносившую вместе с собой готовый меш.</span></li>
+      <li><span class="k k-add">Added</span><span data-l="en"><b>Recalculate + Smooth</b> — a checkbox added to the Light version, on the Very Aggressive modes, with an adjustable Crease Angle. Builds normals from the simplified geometry instead of carrying the source ones, which no longer match it at very low triangle counts (meshoptimizer, experimental).</span><span data-l="ru"><b>Recalculate + Smooth</b> — в Light-версию добавлена галочка на режимах Very Aggressive, с настраиваемым углом складки (Crease Angle). Строит нормали по упрощённой геометрии вместо переноса исходных, которые на очень низком поликаунте ей уже не соответствуют (meshoptimizer, экспериментально).</span></li>
+      <li><span class="k k-chg">Faster</span><span data-l="en"><b>~15% faster generation</b> — Merge by Distance now runs on the buffers, so the mesh is born welded.</span><span data-l="ru"><b>Генерация быстрее примерно на 15%</b> — Merge by Distance выполняется на буферах, и меш рождается сваренным.</span></li>
+    </ul>
+  </article>
+
+  <article class="rel">
     <h2 id="v1-3-2">
       <span class="ver">v1.3.2</span>
       <span class="date">2026-08-09</span>
-      <span class="cur"><span data-l="en">current</span><span data-l="ru">актуальная</span></span>
     </h2>
     <img src="media/fast_lods.gif" alt="Fast LOD generation" loading="lazy" style="display:block;width:100%;max-width:560px;border:1px solid var(--line);border-radius:var(--radius);margin:.3em 0 .9em;">
     <ul class="changes">

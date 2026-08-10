@@ -9,15 +9,20 @@ own; a separate **Pro** version adds fine-grained per-LOD control and extra
 transfer options (see *Pro version* below).
 
 Author: zloy_pingvin
-Requires Blender: 5.0.0+ (may also work on 3.0.0+, but not thoroughly tested)
+Requires Blender: 4.2.0+ (verified on 4.2, 4.5.11 LTS and 5.0)
 
 
 ## Features (Light)
 
 - Up to 5 LOD levels per object, each with its own triangle percentage.
-- 4 one-click quality modes per level: **Careful**, **Standard**,
-  **Aggressive**, **Very Aggressive** — the farther the level, the more
-  aggressive the mode.
+- 5 one-click quality modes per level: **Careful**, **Standard**,
+  **Aggressive**, **Very Aggressive** and **Very Aggressive Alternative** —
+  the farther the level, the more aggressive the mode. The two Very Aggressive
+  modes differ in one thing: the Alternative finishes with a Decimate pass to
+  reach the exact percentage, which suits some models and not others.
+- **Recalculate + Smooth** on the Very Aggressive modes: rebuilds normals from
+  the simplified geometry, since the source ones stop matching it at very low
+  triangle counts.
 - Attribute-aware simplification: keeps UVs and normals so seams and hard
   edges survive.
 - Vertex colors carried onto the LODs, and optionally used as a per-vertex
