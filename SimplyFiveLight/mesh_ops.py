@@ -5,6 +5,7 @@ native_build import X', since that would freeze in whatever value X had at
 import time - before try_load_native() has actually set it.
 """
 
+import bmesh
 import bpy
 import ctypes
 import math
@@ -43,6 +44,30 @@ def mesh_to_position_buffers(me):
     return positions, indices
 
 
+def drop_duplicate_faces(positions, indices, keep=None):
+    """Keep one triangle per set of three positions. Coincident copies merge in
+    meshopt's position remap into >2 wedges, which classifyVertices locks, so
+    neither copy collapses. Returns (indices, dropped). Grouping is on
+    coordinates, not indices: the copies are separate vertices.
+    keep is find_coincident_faces()'s mask over the same triangles - reusing it
+    skips the unique, which is the whole cost here."""
+    tri = np.asarray(indices, dtype=np.uint32).reshape(-1, 3)
+    if len(tri) == 0:
+        return indices, 0
+    if keep is not None and len(keep) == len(tri):
+        dropped = int(len(tri) - keep.sum())
+        if not dropped:
+            return indices, 0
+        return tri[keep].reshape(-1).astype(np.uint32), dropped
+    pos_id = _position_ids(np.array(positions, dtype=np.float32, copy=True))
+    first = np.unique(_triangle_keys(pos_id, tri.ravel()), return_index=True)[1]
+    if len(first) == len(tri):
+        return indices, 0
+    keep = np.zeros(len(tri), dtype=bool)
+    keep[first] = True
+    return tri[keep].reshape(-1).astype(np.uint32), int(len(tri) - len(first))
+
+
 def read_vertex_group_weights(obj, me, group_name):
     """Per-vertex weights of a named vertex group as a 0-1 array (1 =
     important), or None if the group doesn't exist. Vertex groups live on the
@@ -60,6 +85,176 @@ def read_vertex_group_weights(obj, me, group_name):
                 weights[i] = g.weight
                 break
     return weights
+
+
+def _position_ids(co):
+    """Same id for vertices on the same position: the lowest index among them,
+    so ids run inside [0, len) and `ids == arange` means every position is
+    distinct. -0.0 is folded to 0.0 first, in the caller's array - same point,
+    different bits, and mirrored geometry produces it.
+
+    meshopt_generatePositionRemap does the grouping in C when the library has
+    it. The numpy fallback packs the float bit patterns into uint64 in two
+    steps: np.unique(axis=0) and a 12-byte void view both drop numpy to
+    comparing records one at a time, a 1-D integer sort stays vectorised."""
+    co = np.ascontiguousarray(co, dtype=np.float32)
+    co[co == 0.0] = 0.0
+    fn = native_build.position_remap_fn()
+    if fn is not None:
+        remap = np.empty(len(co), dtype=np.uint32)
+        remap_ptr, remap = as_c_uint_p(remap)
+        co_ptr, co = as_c_float_p(co)
+        fn(remap_ptr, co_ptr, len(co), 12)
+        return remap.astype(np.int64, copy=False)
+    b = co.view(np.uint32)
+    key = (b[:, 0].astype(np.uint64) << np.uint64(32)) | b[:, 1].astype(np.uint64)
+    # ravel(): numpy 2 returns the inverse shaped like the input, numpy 1 flat,
+    # and 4.2 and 5.0 ship different majors.
+    xy = np.unique(key, return_inverse=True)[1].ravel()
+    key = (xy.astype(np.uint64) << np.uint64(32)) | b[:, 2].astype(np.uint64)
+    first, inverse = np.unique(key, return_index=True, return_inverse=True)[1:]
+    return first[inverse.ravel()].astype(np.int64, copy=False)
+
+
+def _positions_all_distinct(pos_id):
+    """No two vertices share a position. Both paths label a group by its lowest
+    member, so that is exactly every vertex labelling itself."""
+    return bool(len(pos_id) and
+                (pos_id == np.arange(len(pos_id), dtype=pos_id.dtype)).all())
+
+
+def _triangle_keys(pos_id, tri_vert):
+    """One integer per triangle, equal exactly for triangles on the same three
+    positions in any winding. Packed in two steps rather than one so no mesh is
+    too big for it: each step multiplies by the vertex count, which stays
+    inside int64 at any vertex count Blender can hold."""
+    tri = np.sort(pos_id[tri_vert].reshape(-1, 3).astype(np.int64), axis=1)
+    n_pos = np.int64(len(pos_id))
+    pair = np.unique(tri[:, 0] * n_pos + tri[:, 1], return_inverse=True)[1].ravel()
+    return pair.astype(np.int64) * n_pos + tri[:, 2]
+
+
+def find_coincident_faces(me):
+    """Triangles covering the same three positions as another triangle.
+    meshoptimizer remaps by position, so both sheets' wedges land on one point;
+    past 2 wedges classifyVertices gives up and returns Kind_Locked, and
+    neither copy collapses at any ratio. Bit-exact compare: a tolerance would
+    flag thin geometry (double-sided leaves, panel gaps) that simplifies fine.
+    None if there are none. Scales with triangle count - callers must cache it,
+    never call from a panel redraw."""
+    me.calc_loop_triangles()
+    n_tri = len(me.loop_triangles)
+    if n_tri == 0 or len(me.vertices) == 0:
+        return None
+    co = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    pos_id = _position_ids(co.reshape(-1, 3))
+    if _positions_all_distinct(pos_id):
+        return None                      # no two vertices share a position
+    tri_vert = np.empty(n_tri * 3, dtype=np.int32)
+    me.loop_triangles.foreach_get("vertices", tri_vert)
+    key = _triangle_keys(pos_id, tri_vert)
+    uniq, first, inverse, counts = np.unique(
+        key, return_index=True, return_inverse=True, return_counts=True)
+    doubled = counts > 1
+    if not doubled.any():
+        return None
+    is_dup = doubled[inverse.ravel()]
+
+    tri_poly = np.empty(n_tri, dtype=np.int32)
+    me.loop_triangles.foreach_get("polygon_index", tri_poly)
+    poly_mat = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("material_index", poly_mat)
+    names = []
+    for slot in np.unique(poly_mat[tri_poly[is_dup]]):
+        mat = me.materials[slot] if slot < len(me.materials) else None
+        names.append(mat.name if mat is not None else f"slot {slot}")
+    # keep: one triangle per group, in loop-triangle order. Both buffer paths
+    # index triangles that way, so drop_duplicate_faces can reuse this instead
+    # of running the same unique per LOD.
+    keep = np.zeros(n_tri, dtype=bool)
+    keep[first] = True
+    return {
+        "triangles": int(is_dup.sum()),
+        "places": int(doubled.sum()),
+        "total": n_tri,
+        "materials": names,
+        "keep": keep,
+    }
+
+
+# Measured: a never-unwrapped layer sits at 50-98% depending on polygon type
+# (n-gon caps and boxes at the low end), every real unwrap tested at 0-13%.
+UNWRAPPED_UV_LOCKED = 0.5
+UNWRAPPED_UV_VALUES = 64
+
+
+def _uv_wedges_per_vertex(loop_vert, q_uv, n_vert):
+    """How many distinct UVs each vertex carries, over vertices used by at
+    least one corner. meshopt_generateVertexRemap groups the (vertex, UV)
+    records in C when the library has it; the record is the quantised UV, not
+    the raw float, so both paths count the wedges the dedup key would make."""
+    fn = native_build.vertex_remap_fn()
+    if fn is not None:
+        rec = np.empty((len(loop_vert), 3), dtype=np.uint32)
+        rec[:, 0] = loop_vert
+        rec[:, 1:] = q_uv
+        rec = np.ascontiguousarray(rec)
+        wedge = np.empty(len(loop_vert), dtype=np.uint32)
+        wedge_ptr, wedge = as_c_uint_p(wedge)
+        n_wedge = int(fn(wedge_ptr, None, len(loop_vert),
+                         rec.ctypes.data_as(ctypes.c_void_p), len(loop_vert), 12))
+        # One corner per wedge is enough to name the vertex it belongs to.
+        corner = np.zeros(n_wedge, dtype=np.int64)
+        corner[wedge] = np.arange(len(loop_vert), dtype=np.int64)
+        counts = np.bincount(loop_vert[corner], minlength=int(n_vert))
+        return counts[counts > 0]
+    key = (q_uv[:, 0].astype(np.uint64) << np.uint64(32)) | q_uv[:, 1].astype(np.uint64)
+    uv_id = np.unique(key, return_inverse=True)[1].ravel()
+    wedge = np.unique(uv_id.astype(np.int64) * n_vert + loop_vert)
+    return np.unique(wedge % n_vert, return_counts=True)[1]
+
+
+def find_unwrapped_uv_layers(me, layers=None, threshold=UNWRAPPED_UV_LOCKED):
+    """Share of vertices carrying 3+ UVs, per layer: that is Kind_Locked, and
+    nothing collapses at any ratio. Returns [{index, name, locked, default}]
+    over threshold, index into `layers` (me.uv_layers when None).
+    `default` marks the never-unwrapped layer specifically - Blender fills a
+    new one with the unit square on every face, so the values span exactly
+    0..1 and number at most one per face corner. Only those are safe to drop:
+    a per-face atlas locks the mesh just as hard but its coordinates mean
+    something, and so does a layout parked on a single texel."""
+    layers = list(me.uv_layers) if layers is None else list(layers)
+    n_loops = len(me.loops)
+    if not layers or n_loops == 0 or len(me.vertices) == 0:
+        return []
+    loop_vert = np.empty(n_loops, dtype=np.int64)
+    me.loops.foreach_get("vertex_index", loop_vert)
+    n_vert = np.int64(len(me.vertices))
+    found = []
+    for i, layer in enumerate(layers):
+        flat = np.empty(n_loops * 2, dtype=np.float32)
+        layer.uv.foreach_get("vector", flat)
+        # Same 1e-5 quantum the dedup key uses, so this counts the wedges the
+        # key would actually make. Clipped into int32 so the pair packs into one
+        # uint64 exactly - only UVs past ~21474 units merge, and merging can
+        # only under-report a layer, never flag a good one.
+        q = np.clip(np.rint(flat.reshape(-1, 2).astype(np.float64) * 1e5),
+                    -2 ** 31, 2 ** 31 - 1).astype(np.int32).view(np.uint32)
+        per_vert = _uv_wedges_per_vertex(loop_vert, q, n_vert)
+        locked = float((per_vert >= 3).mean()) if len(per_vert) else 0.0
+        if locked < threshold:
+            continue
+        uv = flat.reshape(-1, 2)
+        span = np.abs(uv.min(axis=0)) + np.abs(uv.max(axis=0) - 1.0)
+        # Only reached by a layer already over the threshold, so the count of
+        # distinct UVs is paid on those and not on every layer of every mesh.
+        key = (q[:, 0].astype(np.uint64) << np.uint64(32)) | q[:, 1].astype(np.uint64)
+        default = bool(len(np.unique(key)) <= UNWRAPPED_UV_VALUES
+                       and (span < 1e-4).all())
+        found.append({"index": i, "name": layer.name, "locked": locked,
+                      "default": default})
+    return found
 
 
 def _lum(rgba):
@@ -140,7 +335,8 @@ def repack_flat_custom_normals(me):
 
 
 def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
-                               key_normals=True):
+                               key_normals=True, skip_unwrapped_uv=False,
+                               unwrapped_uv_names=None):
     """Per-loop dedup, like a GPU vertex buffer: every unique
     (vertex, normal, uv, material) becomes its own entry. meshoptimizer's
     simplifyWithAttributes is specifically designed to handle the resulting
@@ -172,8 +368,22 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
         active = me.uv_layers.active
         uv_layers = [active] if active is not None else []
         active_index = 0
+    blank = []
+    if skip_unwrapped_uv and uv_layers:
+        # Names, not indices: the scan runs over every layer, this list may be
+        # the active one only.
+        if unwrapped_uv_names is None:
+            drop = {f["index"] for f in find_unwrapped_uv_layers(me, uv_layers)
+                    if f["default"]}
+        else:
+            drop = {i for i, l in enumerate(uv_layers)
+                    if l.name in unwrapped_uv_names}
+        if drop:
+            blank = [(i, uv_layers[i].name) for i in sorted(drop)]
+            uv_layers = [l for i, l in enumerate(uv_layers) if i not in drop]
     uv_info = {
         "names": [layer.name for layer in uv_layers],
+        "blank": blank,                    # (source position, name), no data
         "active_index": active_index,
         "active_render": next(
             (k for k, layer in enumerate(uv_layers) if layer.active_render), 0),
@@ -295,6 +505,201 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
     )
 
 
+def _triangle_permutation(before, after):
+    """Which source triangle each reordered triangle came from. The optimizers
+    move whole triples without touching them, so a stable sort of both by the
+    same key pairs them up, i-th duplicate to i-th. Keys must come from one
+    np.unique over both arrays, or the two numberings do not match."""
+    n = np.int64(max(int(before.max()) + 1, 1))
+    both = np.concatenate([before, after], axis=0).astype(np.int64)
+    pair = np.unique(both[:, 0] * n + both[:, 1], return_inverse=True)[1].ravel()
+    key = pair.astype(np.int64) * n + both[:, 2]
+    n_tri = before.shape[0]
+    perm = np.empty(n_tri, dtype=np.int64)
+    perm[np.argsort(key[n_tri:], kind='stable')] = np.argsort(key[:n_tri], kind='stable')
+    return perm
+
+
+OVERDRAW_THRESHOLD = 1.05
+
+
+def gpu_optimize_buffers(positions, faces, corner_attr=None, colors=None,
+                         remap_vertices=True):
+    """Reorder the finished buffers the way a GPU walks them: triangles for
+    the post-transform vertex cache, then for overdraw, then vertices for
+    fetch locality. Nothing moves in space and no triangle appears or
+    disappears - only the order in the arrays, which is what an engine reads.
+
+    Returns everything unchanged when the library predates these calls, and
+    skips the vertex pass when some vertex is unreferenced, since the remap
+    leaves those out. faces stays indexed into positions; corner_attr follows
+    the triangle order because normals, UVs and materials are read through it."""
+    cache_fn = native_build.optimize_vertex_cache_fn()
+    if cache_fn is None or faces is None or len(faces) == 0:
+        return positions, faces, corner_attr, colors
+    faces = np.ascontiguousarray(faces, dtype=np.uint32).reshape(-1, 3)
+    n_vert = int(positions.shape[0])
+    idx_ptr, idx = as_c_uint_p(faces.ravel())
+    out = np.empty_like(idx)
+    out_ptr, out = as_c_uint_p(out)
+    cache_fn(out_ptr, idx_ptr, idx.size, n_vert)
+
+    overdraw_fn = native_build.optimize_overdraw_fn()
+    if overdraw_fn is not None:
+        pos_ptr, pos = as_c_float_p(positions)
+        second = np.empty_like(out)
+        second_ptr, second = as_c_uint_p(second)
+        overdraw_fn(second_ptr, out_ptr, out.size, pos_ptr, n_vert,
+                    pos.shape[1] * 4, OVERDRAW_THRESHOLD)
+        out, out_ptr = second, second_ptr
+
+    new_faces = out.reshape(-1, 3)
+    # A None corner_attr means the attributes are indexed by vertex, which the
+    # vertex remap below stops being true - so it is seeded from the pre-remap
+    # indices and always returned. Without it normals, UVs and material ids keep
+    # the old numbering while faces carries the new one: measured on the
+    # searchlight at 20%, 99.9% of corners took their UV from the wrong place.
+    if corner_attr is None:
+        corner_attr = faces
+    perm = _triangle_permutation(faces, new_faces)
+    corner_attr = np.asarray(corner_attr).reshape(-1, 3)[perm]
+
+    fetch_fn = native_build.optimize_vertex_fetch_remap_fn() if remap_vertices else None
+    if fetch_fn is not None:
+        remap = np.empty(n_vert, dtype=np.uint32)
+        remap_ptr, remap = as_c_uint_p(remap)
+        unique = fetch_fn(remap_ptr, out_ptr, out.size, n_vert)
+        if int(unique) == n_vert:
+            order = remap.astype(np.int64)
+            reordered = np.empty_like(positions)
+            reordered[order] = positions
+            positions = reordered
+            if colors is not None:
+                moved = np.empty_like(colors)
+                moved[order] = colors
+                colors = moved
+            new_faces = remap[new_faces]
+    return positions, new_faces, corner_attr, colors
+
+
+GPU_ORDER_MARK = "sf_gpu_order"
+GPU_ORDER_TRACE = "sf_orig_corner"
+
+
+def mark_gpu_ordered(me):
+    """Remember that this mesh is in GPU order, by the counts it had. The
+    optimizers do not return the input unchanged when it is already good, so
+    there is no cheap way to detect it from the data - and without a mark
+    every Generate would rewrite lod_0 and drop the scan cache it just filled."""
+    me[GPU_ORDER_MARK] = [len(me.vertices), len(me.polygons)]
+
+
+def is_gpu_ordered(me):
+    mark = me.get(GPU_ORDER_MARK)
+    return (mark is not None and len(mark) == 2
+            and mark[0] == len(me.vertices) and mark[1] == len(me.polygons))
+
+
+def reorder_object_for_gpu(obj):
+    """Put an existing object's mesh into GPU order, in place. False when it
+    was already marked as ordered, and then nothing is read or written at all -
+    a Generate that rewrote the source every press would drop its own scan
+    cache every press.
+
+    Applied through bmesh's element sort rather than a rebuild from buffers:
+    Blender moves every layer with the element, so sharp edges, seams, shape
+    keys, vertex groups and custom attributes survive - a rebuild carries only
+    what build_object_from_buffers knows about. Faces follow the triangle
+    order through their first triangle, since the mesh need not be triangles."""
+    me = obj.data
+    if (not native_build.has_gpu_optimize() or len(me.polygons) == 0
+            or is_gpu_ordered(me)):
+        return False
+    me.calc_loop_triangles()
+    n_tri, n_vert = len(me.loop_triangles), len(me.vertices)
+    if n_tri == 0 or n_vert == 0:
+        return False
+    tri_vert = np.empty(n_tri * 3, dtype=np.uint32)
+    me.loop_triangles.foreach_get("vertices", tri_vert)
+    tri_poly = np.empty(n_tri, dtype=np.int32)
+    me.loop_triangles.foreach_get("polygon_index", tri_poly)
+    pos = np.empty(n_vert * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", pos)
+
+    faces = tri_vert.reshape(-1, 3)
+    _, new_faces, tri_perm, _ = gpu_optimize_buffers(
+        pos.reshape(-1, 3), faces, np.arange(n_tri * 3).reshape(-1, 3),
+        None, remap_vertices=False)
+    tri_order = tri_perm[:, 0] // 3
+    # Rank each polygon by where its earliest triangle landed.
+    poly_rank = np.full(len(me.polygons), n_tri, dtype=np.int64)
+    np.minimum.at(poly_rank, tri_poly[tri_order], np.arange(n_tri))
+    face_order = np.argsort(poly_rank, kind='stable')
+
+    fetch_fn = native_build.optimize_vertex_fetch_remap_fn()
+    vert_remap = None
+    if fetch_fn is not None:
+        remap = np.empty(n_vert, dtype=np.uint32)
+        remap_ptr, remap = as_c_uint_p(remap)
+        idx_ptr, idx = as_c_uint_p(new_faces.ravel())
+        if int(fetch_fn(remap_ptr, idx_ptr, idx.size, n_vert)) == n_vert:
+            vert_remap = remap
+
+    face_identity = bool((face_order == np.arange(len(face_order))).all())
+    vert_identity = vert_remap is None or bool(
+        (vert_remap == np.arange(n_vert, dtype=np.uint32)).all())
+    if face_identity and vert_identity:
+        mark_gpu_ordered(me)
+        return False
+
+    # Custom split normals are stored packed against each corner's computed
+    # base, and reordering moves that base: measured on the car, 7202 of 70459
+    # corners decoded differently, worst 0.85. Read them out first and write
+    # them back after, following the corners through a scratch layer bmesh
+    # carries for us - an attribute, not a Python walk, so a dense mesh does
+    # not pay for it.
+    carry_normals = me.has_custom_normals
+    if carry_normals:
+        n_loop = len(me.loops)
+        old_normals = np.empty(n_loop * 3, dtype=np.float32)
+        me.corner_normals.foreach_get("vector", old_normals)
+        old_normals = old_normals.reshape(-1, 3)
+        me.attributes.new(GPU_ORDER_TRACE, 'INT', 'CORNER').data.foreach_set(
+            "value", np.arange(n_loop, dtype=np.int32))
+
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    if vert_remap is not None:
+        rank = {v: int(r) for v, r in zip(bm.verts, vert_remap.tolist())}
+        bm.verts.sort(key=rank.__getitem__)
+    if not face_identity:
+        # face_order lists polygons in their new order; invert it to a rank.
+        rank_of = np.empty(len(face_order), dtype=np.int64)
+        rank_of[face_order] = np.arange(len(face_order))
+        frank = {f: int(r) for f, r in zip(bm.faces, rank_of.tolist())}
+        bm.faces.sort(key=frank.__getitem__)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+    if carry_normals:
+        trace = me.attributes.get(GPU_ORDER_TRACE)
+        try:
+            if trace is not None:
+                order = np.empty(len(me.loops), dtype=np.int32)
+                trace.data.foreach_get("value", order)
+                me.normals_split_custom_set(old_normals[order])
+        finally:
+            trace = me.attributes.get(GPU_ORDER_TRACE)
+            if trace is not None:
+                me.attributes.remove(trace)
+
+    mark_gpu_ordered(me)
+    return True
+
+
 def compact_after_simplify(positions, simplified_indices, normals=None, uvs=None, mat_ids=None,
                             colors=None, importance=None):
     unique_idx, inverse = np.unique(simplified_indices, return_inverse=True)
@@ -398,13 +803,18 @@ def _position_groups(positions, scale=1e5):
     return order, starts, group, order[starts][group]
 
 
-def build_seam_protect_lock(positions, uvs, has_uv, mat_ids=None):
+def build_seam_protect_lock(positions, uvs, has_uv, mat_ids=None,
+                             protect_uv=True, protect_material=False):
     """Equivalent to meshopt_generatePositionRemap + comparing attributes per
     the docs' 'protect specific seams' recipe - group vertices by position,
     flag any vertex whose UV or material ID differs from another vertex
     sharing its position. Used with Permissive so the simplifier can collapse
     freely everywhere except across the seams/material boundaries we
     explicitly protect.
+
+    The two clauses are separate switches: UV seams are an order of magnitude
+    more numerous than material boundaries, so protecting materials must not
+    cost the price of protecting every UV seam.
 
     A vertex alone at its position can never differ from the group's
     representative, so single-vertex groups drop out on their own - no need to
@@ -414,15 +824,87 @@ def build_seam_protect_lock(positions, uvs, has_uv, mat_ids=None):
         return lock
     order, _, _, rep = _position_groups(positions)
     differs = np.zeros(len(order), dtype=bool)
-    if has_uv:
+    if has_uv and protect_uv:
         # np.allclose's tolerances, matching the per-vertex call this replaces
         same = np.isclose(uvs[order], uvs[rep], rtol=1e-5, atol=1e-5)
         np.logical_or(differs, ~np.all(same, axis=1), out=differs)
-    if mat_ids is not None:
+    if mat_ids is not None and protect_material:
         np.logical_or(differs, mat_ids[order] != mat_ids[rep], out=differs)
     lock[order[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
     lock[rep[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
     return lock
+
+
+def build_importance_priority(importance, strength):
+    """meshopt_SimplifyVertex_Priority on the brightest `strength` fraction of
+    the painted vertices. The flag is one bit (fillVertexQuadrics: weight 1.0 vs
+    1e-7), so the count is the only dial - a brightness threshold alone jumps to
+    full effect on a binary mask, where every painted vertex clears it at once.
+    Ties break on a hash of the index, or the subset clumps by vertex order.
+
+    This is what gives the mask teeth: the attribute column alone charges only
+    where the value changes, and on its own it measures as noise."""
+    if importance is None or strength <= 0.0 or len(importance) == 0:
+        return None
+    painted = np.flatnonzero(importance > 0.0)
+    if painted.size == 0:
+        return None
+    scatter = (painted.astype(np.uint64) * np.uint64(2654435761)) & np.uint64(0xFFFFFFFF)
+    order = np.lexsort((scatter, -importance[painted]))
+    count = max(1, int(round(painted.size * min(float(strength), 1.0))))
+    lock = np.zeros(len(importance), dtype=np.uint8)
+    lock[painted[order[:count]]] |= native_build.MESHOPT_VERTEX_PRIORITY
+    return lock
+
+
+def apply_preprune(positions, indices, threshold, max_fraction):
+    """meshopt_simplifyPrune, backed off until it removes no more than
+    max_fraction of the triangles. The call returns the kept buffer, so the cost
+    is measured rather than guessed and a probe is cheap. max_fraction >= 1
+    means no budget. Returns (indices, threshold used, triangles removed)."""
+    total = len(indices)
+    if total == 0 or threshold <= 0.0:
+        return indices, threshold, 0
+    kept = native_simplify_prune(positions, indices, threshold)
+    if max_fraction >= 1.0:
+        return kept, threshold, (total - len(kept)) // 3
+    limit = total * max_fraction
+    for _ in range(8):
+        if (total - len(kept)) <= limit or threshold <= 1e-4:
+            break
+        threshold *= 0.5
+        kept = native_simplify_prune(positions, indices, threshold)
+    return kept, threshold, (total - len(kept)) // 3
+
+
+def simplify_to_target(call, target_index_count, target_error, steps=4,
+                        tolerance=0.1):
+    """meshopt's Prune drops whole components at once, so a pass can land far
+    below the target - it cannot remove half a component. Prune is bounded by
+    error_limit, which is target_error, so bisect that down until the count is
+    back in range. Only the first call runs unless the pass overshoots.
+    call(error) -> (indices, result_error). Returns (indices, result_error,
+    error used, extra passes)."""
+    result, error = call(target_error)
+    floor = target_index_count * (1.0 - tolerance)
+    if len(result) >= floor or target_error <= 0.0:
+        return result, error, target_error, 0
+    ceil = target_index_count * (1.0 + tolerance)
+    best = (result, error, target_error, abs(len(result) - target_index_count))
+    lo, hi = 0.0, target_error
+    for i in range(steps):
+        mid = 0.5 * (lo + hi)
+        r, e = call(mid)
+        gap = abs(len(r) - target_index_count)
+        if gap < best[3]:
+            best = (r, e, mid, gap)
+        if len(r) < floor:
+            hi = mid
+        elif len(r) > ceil:
+            lo = mid
+        else:
+            return r, e, mid, i + 1
+    return best[0], best[1], best[2], steps
 
 
 def _build_attr_array(normals, uvs, has_uv, normal_weight, uv_weight,
@@ -518,18 +1000,27 @@ def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
 
     # attrs holds weighted values; divide back out to recover true units.
     # (The trailing importance column, if any, is ignored on the way out.)
-    new_normals = attrs[:, :3] / normal_weight if normal_weight else attrs[:, :3]
-    # simplifyWithUpdate blends attribute values, so normals come back
-    # non-unit-length; the meshoptimizer README requires renormalizing
-    # ("Attributes that have specific constraints like normals ... should
-    # be renormalized or clamped after the function returns new data").
-    lengths = np.linalg.norm(new_normals, axis=1, keepdims=True)
-    np.divide(new_normals, lengths, out=new_normals, where=lengths > 1e-12)
-    if has_uv:
-        uv_cols = uvs.shape[1]
-        new_uvs = attrs[:, 3:3 + uv_cols] / uv_weight if uv_weight else attrs[:, 3:3 + uv_cols]
+    #
+    # At weight 0 the column went in as zeros, so there is nothing to divide
+    # back - reading it would hand the LOD a zeroed attribute. Return the input
+    # instead, which is what weight 0 means: the meshoptimizer header updates
+    # only the attributes with a non-zero weight.
+    if normal_weight:
+        new_normals = attrs[:, :3] / normal_weight
+        # simplifyWithUpdate blends attribute values, so normals come back
+        # non-unit-length; the meshoptimizer README requires renormalizing
+        # ("Attributes that have specific constraints like normals ... should
+        # be renormalized or clamped after the function returns new data").
+        lengths = np.linalg.norm(new_normals, axis=1, keepdims=True)
+        np.divide(new_normals, lengths, out=new_normals, where=lengths > 1e-12)
     else:
+        new_normals = np.array(normals, dtype=np.float32, copy=True)
+    if not has_uv:
         new_uvs = None
+    elif uv_weight:
+        new_uvs = attrs[:, 3:3 + uvs.shape[1]] / uv_weight
+    else:
+        new_uvs = np.array(uvs, dtype=np.float32, copy=True)
 
     return positions, new_indices, new_normals, new_uvs, result_error.value
 
@@ -736,7 +1227,18 @@ def weld_position_buffers(positions, faces, threshold):
     welded = labels[faces].astype(np.uint32)
     keep = ((welded[:, 0] != welded[:, 1]) & (welded[:, 1] != welded[:, 2])
             & (welded[:, 0] != welded[:, 2]))
-    return (positions[rep], welded[keep],
+    welded = welded[keep]
+    # A survivor whose only triangles were degenerate is now in none of them:
+    # it would reach the LOD as a loose vertex. Drop those and renumber. rep is
+    # returned too and colors are remapped through it, so both must shrink.
+    used = np.zeros(len(rep), dtype=bool)
+    used[welded.ravel()] = True
+    if not used.all():
+        remap = np.full(len(rep), -1, dtype=np.int64)
+        remap[used] = np.arange(int(used.sum()), dtype=np.int64)
+        welded = remap[welded].astype(np.uint32)
+        rep = rep[used]
+    return (positions[rep], welded,
             faces[keep].ravel().astype(np.uint32), rep)
 
 
@@ -806,6 +1308,40 @@ def merge_by_distance(obj, threshold):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def drop_loose_verts(obj):
+    """Delete vertices no face uses, and report how many there were.
+
+    Whatever rebuilds the finished mesh can leave them behind: remove_doubles
+    (the Edit Mode weld fallback) and Blender's own Decimate both do. They cost
+    file size and trip up engines that expect every vertex to belong to a
+    triangle.
+
+    use_edges=True is mandatory, not tidiness: by the operator's definition a
+    vertex still held by a wire edge is not loose, so without it the pass finds
+    nothing to remove. Edit Mode rather than bmesh for the same reason
+    merge_by_distance uses it - a bmesh round-trip costs the custom normals.
+    A loose vertex has no corners, so nothing per-corner can change here."""
+    me = obj.data
+    if not me.polygons or not me.vertices:
+        return 0
+    idx = np.empty(len(me.loops), dtype=np.int32)
+    me.loops.foreach_get("vertex_index", idx)
+    used = np.zeros(len(me.vertices), dtype=bool)
+    used[idx] = True
+    n = int((~used).sum())
+    if n == 0:
+        return 0
+    view_layer = bpy.context.view_layer
+    for o in view_layer.objects:
+        o.select_set(o == obj)
+    view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.delete_loose(use_verts=True, use_edges=True, use_faces=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return n
+
+
 def deselect_mesh_elements(me):
     """A freshly built LOD arrives selected, so Edit Mode would open on it
     that way. Runs last, after the mesh is final.
@@ -850,15 +1386,24 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
     corner_vert = np.ascontiguousarray(
         faces if corner_attr is None else corner_attr, dtype=np.int64).ravel()
 
-    if uvs is not None:
+    blank = list(uv_info["blank"]) if uv_info and uv_info.get("blank") else []
+    if uvs is not None or blank:
         # uvs is (N, 2*num_layers); uv_info carries the source layers' names
         # and active/active_render flags so the LOD matches the original.
-        names = uv_info["names"] if uv_info and uv_info["names"] else ["UVMap"]
-        num_layers = uvs.shape[1] // 2
-        for k in range(num_layers):
-            layer_name = names[k] if k < len(names) else f"UVMap.{k:03d}"
+        names = uv_info["names"] if uv_info and uv_info["names"] else (
+            [] if blank else ["UVMap"])
+        num_layers = uvs.shape[1] // 2 if uvs is not None else 0
+        plan = [(names[k] if k < len(names) else f"UVMap.{k:03d}", k)
+                for k in range(num_layers)]
+        # Ascending source positions, or active_index addresses the wrong layer.
+        for pos, blank_name in blank:
+            plan.insert(min(pos, len(plan)), (blank_name, None))
+        for layer_name, col in plan:
             uv_layer = mesh.uv_layers.new(name=layer_name)
-            flat = np.ascontiguousarray(uvs[corner_vert, 2 * k:2 * k + 2], dtype=np.float32)
+            if col is None:
+                continue          # stays on Blender's fill, as the source was
+            flat = np.ascontiguousarray(uvs[corner_vert, 2 * col:2 * col + 2],
+                                        dtype=np.float32)
             uv_layer.uv.foreach_set("vector", flat.ravel())
         if uv_info:
             render_idx = uv_info["active_render"]
@@ -921,12 +1466,34 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
 def simplify_object(context, src, ratio, target_error, options, use_attributes,
                      normal_weight, uv_weight, name, do_merge, merge_threshold,
                      use_vertex_update=False, protect_uv_seams=False,
+                     protect_material_borders=False,
                      use_vcolor_importance=False, importance_weight=0.5,
                      preprune_threshold=0.0, use_multi_uv=False,
                      use_decimate_finish=False, importance_source='VCOLOR',
                      importance_vgroup="", use_smooth_normals=False,
-                     smooth_crease_angle=SMOOTH_CREASE_ANGLE):
+                     smooth_crease_angle=SMOOTH_CREASE_ANGLE,
+                     skip_unwrapped_uv=False, drop_duplicates=False,
+                     gpu_order=False, source_scan=None,
+                     preprune_budget=1.0, retarget_steps=0):
     eval_obj, me = get_evaluated_mesh(context, src)
+    # The scan the operator took on lod_0. Both checks are whole-mesh passes
+    # costing seconds at a million triangles, so every LOD after the first
+    # reads them instead of repeating them. The shape check rejects a scan
+    # taken on another mesh - or one taken unevaluated while the source carries
+    # modifiers.
+    me.calc_loop_triangles()
+    if source_scan is not None and not (
+            source_scan.get("tris") == len(me.loop_triangles)
+            and source_scan.get("loops") == len(me.loops)
+            and source_scan.get("uv_names") == tuple(l.name for l in me.uv_layers)):
+        source_scan = None
+    dup_keep = source_scan.get("keep") if source_scan else None
+    unwrapped_names = source_scan.get("unwrapped") if source_scan else None
+    if source_scan and source_scan.get("no_duplicates"):
+        drop_duplicates = False
+    # Set when duplicate triangles were dropped: 'before' and the percentage
+    # must still be reported against the source, not the shrunken buffer.
+    source_index_count = None
     new_mat_ids = None
     new_colors = None
     uv_info = None
@@ -969,44 +1536,119 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
         # not already have, so it neither enters the dedup key nor comes back
         # out as custom split normals - the LOD stays flat, like the source.
         flat_source = use_attributes and source_is_flat_shaded(me)
+        if flat_source:
+            # Nor the error metric. Without the key splitting them, a vertex
+            # keeps whichever corner's face normal came first, so weighting it
+            # makes meshopt protect noise and spend the budget on slivers.
+            normal_weight = 0.0
         if use_attributes:
             (positions, normals, uvs, indices, uv_info, mat_ids,
              importance, has_color, colors, color_info) = mesh_to_attribute_buffers(
-                me, use_multi_uv, vgroup_weights, key_normals=not flat_source)
+                me, use_multi_uv, vgroup_weights, key_normals=not flat_source,
+                skip_unwrapped_uv=skip_unwrapped_uv,
+                unwrapped_uv_names=unwrapped_names)
             has_uv = bool(uv_info["names"])
             colors_arg = colors if color_info["names"] else None
+            # Percentage and reported 'before' stay against the source, so
+            # dropping duplicates below does not quietly shrink either.
             target_index_count = max(3, int(len(indices) * ratio))
             target_index_count -= target_index_count % 3
+            if drop_duplicates:
+                indices, dropped = drop_duplicate_faces(positions, indices,
+                                                        keep=dup_keep)
+                if dropped:
+                    source_index_count = len(indices) + dropped * 3
+                    target_index_count = min(target_index_count, len(indices))
+                    print(f"[LOD Generator] {src.name}: dropped {dropped} "
+                          f"duplicated triangles before simplifying")
 
             imp_arg = importance if (use_vcolor_importance and has_color) else None
             imp_w = importance_weight if (use_vcolor_importance and has_color) else 0.0
+            # The missing-vertex-group case already reported itself above; say
+            # so for a missing colour layer too, or the mask just does nothing.
+            if use_vcolor_importance and not has_color and importance_source == 'VCOLOR':
+                print(f"[LOD Generator] Importance mask is set to Vertex Color "
+                      f"but {src.name} has no color attribute - simplifying "
+                      f"without an importance mask.")
+
+            # Needs Permissive: classifyVertices only reads the Protect bit
+            # inside its `options & meshopt_SimplifyPermissive` branch, so
+            # without it the array is a no-op.
+            seam_lock = None
+            if ((protect_uv_seams or protect_material_borders)
+                    and (options & native_build.MESHOPT_PERMISSIVE)):
+                seam_lock = build_seam_protect_lock(
+                    positions, uvs, has_uv, mat_ids,
+                    protect_uv=protect_uv_seams,
+                    protect_material=protect_material_borders)
+
+            # The mask's teeth. The attribute channel charges only where the
+            # value changes, so on its own it measures as noise.
+            priority_arr = None
+            if imp_arg is not None:
+                priority_arr = build_importance_priority(importance, importance_weight)
 
             vertex_lock = None
-            if protect_uv_seams and (options & native_build.MESHOPT_PERMISSIVE):
-                vertex_lock = build_seam_protect_lock(positions, uvs, has_uv, mat_ids)
+            for part in (seam_lock, priority_arr):
+                if part is None:
+                    continue
+                vertex_lock = part if vertex_lock is None else (vertex_lock | part)
 
             if preprune_threshold > 0.0:
-                indices = native_simplify_prune(positions, indices, preprune_threshold)
+                indices, used_thr, removed = apply_preprune(
+                    positions, indices, preprune_threshold, preprune_budget)
+                if removed:
+                    note = ("" if used_thr == preprune_threshold else
+                            f" (threshold backed off to {used_thr:.4f})")
+                    print(f"[LOD Generator] {src.name}: Pre-prune removed "
+                          f"{removed} triangles{note}")
+                    # Same clamp the duplicate drop above needs, and for the
+                    # same reason: the target was computed against the source,
+                    # and meshopt_simplify requires target <= index_count. A
+                    # pre-prune that takes more than the LOD asked to keep would
+                    # otherwise hand the library a target it asserts on.
+                    target_index_count = min(target_index_count, len(indices))
             options = apply_sparse_option(options, positions, indices)
 
             if use_vertex_update:
-                upd_pos, simplified, upd_norm, upd_uv, result_error = native_simplify_with_update(
-                    positions, normals, uvs, has_uv, indices,
-                    target_index_count, target_error, options,
-                    normal_weight, uv_weight, vertex_lock=vertex_lock,
-                    importance=imp_arg, importance_weight=imp_w,
-                )
+                # This call also returns moved positions/normals/UVs, and
+                # simplify_to_target only carries the index buffer, so each
+                # pass parks its extras under the length it produced.
+                held = {}
+
+                def _update_call(err):
+                    up, simp, un, uu, res = native_simplify_with_update(
+                        positions, normals, uvs, has_uv, indices,
+                        target_index_count, err, options,
+                        normal_weight, uv_weight, vertex_lock=vertex_lock,
+                        importance=imp_arg, importance_weight=imp_w)
+                    held[len(simp)] = (up, un, uu)
+                    return simp, res
+
+                simplified, result_error, used_err, extra = simplify_to_target(
+                    _update_call, target_index_count, target_error,
+                    steps=retarget_steps)
+                upd_pos, upd_norm, upd_uv = held[len(simplified)]
+                if extra:
+                    print(f"[LOD Generator] {src.name}: overshot the target, "
+                          f"Target Error lowered to {used_err:.4f} in {extra} "
+                          f"pass(es)")
                 (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
                  new_importance) = compact_after_simplify(
                     upd_pos, simplified, upd_norm, upd_uv if has_uv else None, mat_ids,
                     colors_arg, imp_arg)
             else:
-                simplified, result_error = native_simplify_attributes(
-                    positions, normals, uvs, has_uv, indices,
-                    target_index_count, target_error, options,
-                    normal_weight, uv_weight, vertex_lock=vertex_lock,
-                    importance=imp_arg, importance_weight=imp_w,
-                )
+                simplified, result_error, used_err, extra = simplify_to_target(
+                    lambda err: native_simplify_attributes(
+                        positions, normals, uvs, has_uv, indices,
+                        target_index_count, err, options,
+                        normal_weight, uv_weight, vertex_lock=vertex_lock,
+                        importance=imp_arg, importance_weight=imp_w),
+                    target_index_count, target_error, steps=retarget_steps)
+                if extra:
+                    print(f"[LOD Generator] {src.name}: overshot the target, "
+                          f"Target Error lowered to {used_err:.4f} in {extra} "
+                          f"pass(es)")
                 (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
                  new_importance) = compact_after_simplify(
                     positions, simplified, normals, uvs if has_uv else None, mat_ids,
@@ -1016,7 +1658,15 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             target_index_count = max(3, int(len(indices) * ratio))
             target_index_count -= target_index_count % 3
             if preprune_threshold > 0.0:
-                indices = native_simplify_prune(positions, indices, preprune_threshold)
+                indices, used_thr, removed = apply_preprune(
+                    positions, indices, preprune_threshold, preprune_budget)
+                if removed:
+                    note = ("" if used_thr == preprune_threshold else
+                            f" (threshold backed off to {used_thr:.4f})")
+                    print(f"[LOD Generator] {src.name}: Pre-prune removed "
+                          f"{removed} triangles{note}")
+                    # See the same clamp on the attribute path above.
+                    target_index_count = min(target_index_count, len(indices))
             options = apply_sparse_option(options, positions, indices)
             simplified, result_error = native_simplify_positions(
                 positions, indices, target_index_count, target_error, options)
@@ -1045,7 +1695,20 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             if new_importance is not None:
                 new_importance = new_importance[weld_rep]
 
-    before_tris = len(indices) // 3
+    # On the buffers while they are still ours, which costs almost nothing.
+    # When something below rebuilds the mesh - the Edit Mode weld fallback or
+    # the Decimate finish - the ordering is redone on the finished object
+    # instead, at the end of this function.
+    rebuilt_after = merge_on_object or use_decimate_finish
+    if gpu_order and not rebuilt_after:
+        try:
+            new_pos, new_faces, corner_attr, new_colors = gpu_optimize_buffers(
+                new_pos, new_faces, corner_attr, new_colors)
+        except Exception as exc:
+            print(f"[LOD Generator] GPU order optimization skipped on {name}: {exc}")
+
+    before_tris = (source_index_count if source_index_count is not None
+                   else len(indices)) // 3
     after_tris = new_faces.shape[0]
 
     # Nothing left: adding an object with no triangles used to happen silently.
@@ -1128,12 +1791,37 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                 print(f"[LOD Generator] Could not remove the temporary "
                       f"importance group on {obj.name}: {exc}")
 
+    # Only where the mesh was rebuilt on the object - the buffer path already
+    # drops them in weld_position_buffers. Must run before the GPU reordering
+    # below, which stamps the mesh with its vertex/face counts: removing
+    # vertices after that would leave the mark describing a mesh that changed.
+    # The n == 0 early exit makes the normal path free.
+    if rebuilt_after:
+        try:
+            gone = drop_loose_verts(obj)
+            if gone:
+                print(f"[LOD Generator] {obj.name}: removed {gone} vertices no "
+                      f"face used")
+        except Exception as exc:
+            print(f"[LOD Generator] loose-vertex cleanup skipped on "
+                  f"{obj.name}: {exc}")
+
     # After the Decimate finish, so the generator sees the topology that is
     # actually left - recalculating before it would describe a mesh that no
     # longer exists.
     if use_smooth_normals and not generate_normals(obj, smooth_crease_angle):
         print(f"[LOD Generator] meshoptimizer in this build cannot generate "
               f"normals - {obj.name} keeps the normals it was built with")
+
+    if gpu_order:
+        try:
+            if rebuilt_after:
+                reorder_object_for_gpu(obj)
+            else:
+                mark_gpu_ordered(obj.data)   # done on the buffers above
+        except Exception as exc:
+            print(f"[LOD Generator] GPU order optimization skipped on "
+                  f"{obj.name}: {exc}")
 
     # Last, once the mesh is final: Merge by Distance selects everything to do
     # its work, so clearing the selection any earlier would be undone.

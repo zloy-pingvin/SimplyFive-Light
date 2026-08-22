@@ -1,1 +1,1 @@
-{"permissive": 32, "protect": 2, "regularize": 16, "regularize_light": 64, "version": "1.2", "lock": 1}
+{"permissive": 32, "protect": 2, "regularize": 16, "regularize_light": 64, "remesh_thicken": 1, "remesh_shell": 2, "remesh_solve": 4, "version": "1.2", "lock": 1, "priority": 4}

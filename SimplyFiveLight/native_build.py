@@ -23,6 +23,7 @@ def get_dll_ext():
 _native_lib = None
 MESHOPT_PERMISSIVE = 16      # meshopt_SimplifyPermissive; overwritten from flags below
 MESHOPT_VERTEX_PROTECT = 1   # meshopt_SimplifyVertex_Protect; overwritten from flags below
+MESHOPT_VERTEX_PRIORITY = 4  # meshopt_SimplifyVertex_Priority (1<<2); overwritten below
 
 c_float_p = ctypes.POINTER(ctypes.c_float)
 c_uint_p = ctypes.POINTER(ctypes.c_uint)
@@ -72,6 +73,82 @@ def generate_normals_fn():
     return fn
 
 
+def _lazy_fn(name, restype, argtypes):
+    """One of the functions added after an older bundled library was built.
+    None when this library predates it, so callers keep their own fallback."""
+    if _native_lib is None or not hasattr(_native_lib, name):
+        return None
+    fn = getattr(_native_lib, name)
+    fn.restype = restype
+    fn.argtypes = argtypes
+    return fn
+
+
+def position_remap_fn():
+    """meshopt_generatePositionRemap: every vertex sharing a position maps to
+    the first of them. Same grouping mesh_ops._position_ids does in numpy.
+
+    void meshopt_generatePositionRemap(unsigned int* destination,
+        const float* vertex_positions, size_t vertex_count,
+        size_t vertex_positions_stride);"""
+    return _lazy_fn("meshopt_generatePositionRemap", None,
+                    [c_uint_p, c_float_p, ctypes.c_size_t, ctypes.c_size_t])
+
+
+def vertex_remap_fn():
+    """meshopt_generateVertexRemap: identical vertex records collapse to one
+    id. Fed a per-corner (vertex index, u, v) record with indices NULL it is
+    the UV wedge grouping find_unwrapped_uv_layers does in numpy.
+
+    size_t meshopt_generateVertexRemap(unsigned int* destination,
+        const unsigned int* indices, size_t index_count, const void* vertices,
+        size_t vertex_count, size_t vertex_size);"""
+    return _lazy_fn("meshopt_generateVertexRemap", ctypes.c_size_t,
+                    [c_uint_p, c_uint_p, ctypes.c_size_t, ctypes.c_void_p,
+                     ctypes.c_size_t, ctypes.c_size_t])
+
+
+def has_gpu_optimize():
+    """Cheap enough for draw(): an older bundled library has no reordering
+    calls, and a switch that silently does nothing must not be offered."""
+    return (_native_lib is not None
+            and hasattr(_native_lib, "meshopt_optimizeVertexCache"))
+
+
+def optimize_vertex_cache_fn():
+    """meshopt_optimizeVertexCache: reorders whole triangles so the GPU's
+    post-transform cache hits more often. Triples are copied unchanged, which
+    is what lets mesh_ops recover the permutation.
+
+    void meshopt_optimizeVertexCache(unsigned int* destination,
+        const unsigned int* indices, size_t index_count, size_t vertex_count);"""
+    return _lazy_fn("meshopt_optimizeVertexCache", None,
+                    [c_uint_p, c_uint_p, ctypes.c_size_t, ctypes.c_size_t])
+
+
+def optimize_overdraw_fn():
+    """meshopt_optimizeOverdraw: reorders triangles to shade fewer covered
+    pixels, giving up at most `threshold` of the cache gain above.
+
+    void meshopt_optimizeOverdraw(unsigned int* destination,
+        const unsigned int* indices, size_t index_count,
+        const float* vertex_positions, size_t vertex_count,
+        size_t vertex_positions_stride, float threshold);"""
+    return _lazy_fn("meshopt_optimizeOverdraw", None,
+                    [c_uint_p, c_uint_p, ctypes.c_size_t, c_float_p,
+                     ctypes.c_size_t, ctypes.c_size_t, ctypes.c_float])
+
+
+def optimize_vertex_fetch_remap_fn():
+    """meshopt_optimizeVertexFetchRemap: old vertex -> new vertex, ordering
+    the vertex buffer the way the index buffer walks it.
+
+    size_t meshopt_optimizeVertexFetchRemap(unsigned int* destination,
+        const unsigned int* indices, size_t index_count, size_t vertex_count);"""
+    return _lazy_fn("meshopt_optimizeVertexFetchRemap", ctypes.c_size_t,
+                    [c_uint_p, c_uint_p, ctypes.c_size_t, ctypes.c_size_t])
+
+
 def _bundled_dll_path():
     """The .dll/.so/.dylib placed right next to this .py file. Matches by glob
     rather than an exact name, since a build's output can carry a timestamp
@@ -93,6 +170,7 @@ def try_load_native():
     """Load the bundled shared library via ctypes (stdlib only, no extra pip
     package needed) and read its meshopt_flags.json for the real enum values."""
     global _native_lib, MESHOPT_PERMISSIVE, MESHOPT_VERTEX_PROTECT
+    global MESHOPT_VERTEX_PRIORITY
 
     dll_path = _bundled_dll_path()
     if not dll_path:
@@ -110,6 +188,7 @@ def try_load_native():
                     flags = json.load(handle)
                 MESHOPT_PERMISSIVE = int(flags.get("permissive", MESHOPT_PERMISSIVE))
                 MESHOPT_VERTEX_PROTECT = int(flags.get("protect", MESHOPT_VERTEX_PROTECT))
+                MESHOPT_VERTEX_PRIORITY = int(flags.get("priority", MESHOPT_VERTEX_PRIORITY))
             except Exception as exc:
                 print(f"[LOD Generator] Could not read flags file, using defaults: {exc}")
         else:

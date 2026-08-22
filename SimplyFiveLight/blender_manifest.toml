@@ -2,7 +2,7 @@ schema_version = "1.0.0"
 
 # Unique, lowercase, underscores only. Do NOT change after first publish.
 id = "simplyfive_light"
-version = "1.3.5"
+version = "1.3.9"
 name = "SimplyFive Light"
 tagline = "One-click LOD meshes via meshoptimizer"
 maintainer = "zloy_pingvin"
@@ -13,9 +13,9 @@ website = "https://zloy-pingvin.github.io/SimplyFive-Light/"
 # Valid Blender add-on tags only.
 tags = ["Mesh", "Modeling", "Pipeline"]
 
-# One archive for every supported version. Verified against 4.2, 4.5.11 LTS and
-# 5.0: geometry, UVs, materials and colors match bit for bit; 4.2 differs only
-# in custom-normal packing, by at most 0.05 degrees.
+# One archive for every supported version. Verified against 4.2, 4.5.11 LTS,
+# 5.0 and 5.2 LTS: geometry, UVs, materials and colors match bit for bit; 4.2
+# differs only in custom-normal packing, by at most 0.05 degrees.
 blender_version_min = "4.2.0"
 
 license = [
@@ -27,6 +27,12 @@ license = [
 #   lodgen_meshopt.so     - linux-x64 (ELF x86-64)
 #   lodgen_meshopt.dylib  - macOS universal (x86_64 + arm64)
 platforms = ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"]
+
+# Shown to the user at install time. The only request the add-on ever makes is
+# the once-a-day version check against the product site, and Preferences has a
+# switch that turns it off entirely.
+[permissions]
+network = "Check the product site for a newer version (optional, once a day)"
 
 [build]
 # Never ship bytecode, git internals or release archives inside the extension.
