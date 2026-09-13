@@ -14,7 +14,9 @@ Requires Blender: 4.2.0+ (verified on 4.2, 4.5.11 LTS, 5.0 and 5.2 LTS)
 
 ## Features (Light)
 
-- Up to 5 LOD levels per object, each with its own triangle percentage.
+- Up to 5 LOD levels per object. Each level's target is set either as a
+  percentage of the source or as an absolute triangle count, the way platform
+  budgets are written.
 - 5 one-click quality modes per level: **Careful**, **Standard**,
   **Aggressive**, **Very Aggressive** and **Very Aggressive Alternative** —
   the farther the level, the more aggressive the mode. The two Very Aggressive
@@ -42,6 +44,20 @@ Requires Blender: 4.2.0+ (verified on 4.2, 4.5.11 LTS, 5.0 and 5.2 LTS)
 - Configurable LOD name suffix (Preferences), default `_lod_`.
 - In-viewport LOD preview slider, plus a **Line Up LODs** review mode that
   lays all levels out in a row for side-by-side comparison.
+- **Keep the original object**: generate from a copy instead of renaming —
+  your object keeps its name and is hidden, the copy becomes `lod_0`.
+- Parented assemblies keep their shape: every generated level is placed under
+  the same level of its parent, so a single level of an assembly can be
+  selected, hidden or exported on its own. A parent with no LODs of its own
+  gets an empty standing in for it, and the panel names those parents.
+- A **result block under each level** after generating: requested → produced
+  triangles, why the level missed, and one hint naming a lever this mesh
+  actually responds to. It also reports what was lost quietly — materials with
+  no triangles left in the LOD, an importance mask that found no vertex group,
+  extra UV maps dropped — and flags the case where the triangle count was hit
+  but a part that would not collapse ate the budget of the rest.
+- A notice before generating on a skinned mesh or one with shape keys: only
+  geometry is carried, so the LOD is baked in the current pose and key mix.
 - Optional once-a-day update check against the product site, off with one
   switch — with it off the add-on never touches the network.
 - Russian UI translation.
@@ -66,6 +82,16 @@ The Pro version keeps everything in Light and adds:
 - **Limit Prune**: stop pruning from deleting whole parts.
 - An extra topology-ignoring ultra-aggressive mode, a voxel remesh, and a
   "regularize" pass for more uniform triangles.
+- **Batch queue**: every selected mesh becomes a task with its own settings,
+  its own level count and its own modes; *Apply Settings to Selected* sets up
+  symmetrical parts in one press, a preview slider switches the whole queue
+  between levels, and one button runs it.
+- **Transfer Vertex Groups**: the LOD arrives bound to the skeleton — the
+  armature binding is copied and each surviving vertex inherits the weights the
+  source really had.
+- **Transfer Shape Keys** onto the near levels, with a limit on how far they go.
+- Two extra presets: **Clear Simplify** (geometry only, for very far levels)
+  and **Scan** (photogrammetry).
 - Save and load full configurations as named presets, plus editable mode
   presets.
 
@@ -87,12 +113,14 @@ required.
 4. For each level, choose a mode (Careful / Standard / Aggressive / Very
    Aggressive) — the farther the level is from "0", the more aggressive the
    mode should be.
-5. Optionally adjust the triangle percentage (%) for each level.
+5. Set the size of each level — the toggle in the level header picks the unit:
+   `%` of the source, or `Tris` for an absolute triangle count.
 6. Click "Generate LODs".
 
 The source object is renamed to "name_lod_0", and "name_lod_1",
 "name_lod_2", etc. appear next to it — one per level (the `_lod_` suffix is
-configurable in Preferences). The "LOD Preview (distance)" slider inspects
+configurable in Preferences; with "Keep the original object" on it is copied
+instead of renamed). The "LOD Preview (distance)" slider inspects
 each level individually, and the icon button next to it ("Line Up LODs")
 lays every generated level out in a row for side-by-side comparison.
 

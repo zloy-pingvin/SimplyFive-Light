@@ -11,6 +11,82 @@
 
 TRANSLATIONS_RU = {
     "Pre-prune": "Предобрезка",
+    "Available in SimplyFive Pro": "Доступно в SimplyFive Pro",
+    "Queue every selected mesh with the settings on screen":
+        "Поставить в очередь каждый выделенный меш с текущими настройками",
+    "Remove the selected task": "Удалить выбранную задачу",
+    "Move the selected task": "Переместить выбранную задачу",
+    "Write the settings on screen into the task of every selected mesh":
+        "Записать текущие настройки в задачу каждого выделенного меша",
+    "Unhide every LOD in the queue": "Показать все LOD из очереди",
+    "Generate every enabled task in order": "Обработать все включённые задачи по порядку",
+    "Remove every task from the queue": "Удалить из очереди все задачи",
+    "Clear Simplify": "Clear Simplify",
+    "Scan": "Scan",
+    "Geometry only - no UVs, materials or colors carried - at a high Target Error, with normals rebuilt from the result. For very far/simple LODs":
+        "Только геометрия — без UV, материалов и цветов — при высоком Target Error, с пересчётом нормалей по результату. Для очень дальних и простых LOD",
+    "Photogrammetry: shape, UV layout and vertex colors come first, at the cost of normal accuracy. Also an aggressive pre-prune pass that clears scanning debris":
+        "Фотограмметрия: приоритет сохранения формы, UV-развёртки и цвета вершин, ценой корректности нормалей. Также агрессивный проход пре-прун, убирающий мусор скана",
+    "Set Mode": "Задать режим",
+    "Switches every enabled task in the queue at once: 0 = lod_0 (closest), higher = further LODs. Each family is clamped to its own last level, so a part with fewer LODs shows its furthest one instead of disappearing":
+        "Переключает все включённые задачи очереди разом: 0 — lod_0 (ближайший), дальше — более дальние LOD. Каждое семейство зажато по своему последнему уровню, поэтому деталь с меньшим числом LOD показывает свой самый дальний, а не исчезает",
+    "Batch queue - available in Pro": "Пакетная очередь — доступна в Pro",
+    "Batch Queue": "Пакетная очередь",
+    "Queue several objects and generate them in one run":
+        "Поставить в очередь несколько объектов и обработать их одним прогоном",
+    "Available in SimplyFive Pro": "Доступно в SimplyFive Pro",
+    "Add Selected to Queue": "Добавить выделенное в очередь",
+    "Apply Settings to Selected": "Применить настройки к выделенным",
+    "Generate All Tasks": "Обработать все задачи",
+    "Clear Queue": "Очистить очередь",
+    "Object": "Объект",
+    "Duplicated surfaces do not collapse.": "Дублирующие поверхности не схлопываются.",
+    "Turn on removing duplicated surfaces in the preferences.":
+        "Включите удаление дублирующих поверхностей в настройках.",
+    "An unwrapped UV map locks the mesh.": "Неразвёрнутая UV-карта запирает меш.",
+    "Turn on skipping an unwrapped UV map in the preferences.":
+        "Включите пропуск неразвёрнутой UV-карты в настройках.",
+    "Part of the mesh did not collapse.": "Часть меша не схлопнулась.",
+    "Most of this level is geometry that did not collapse.":
+        "Большая часть этого уровня — геометрия, которая не схлопнулась.",
+    "The error limit stopped it early.": "Упрощение остановил предел ошибки.",
+    "Seams and hard edges lock the vertices.": "Швы и жёсткие рёбра запирают вершины.",
+    "Try the Aggressive Mode.": "Попробуйте режим Aggressive.",
+    "Try the Very Aggressive Mode.": "Попробуйте режим Very Aggressive.",
+    "Try Very Aggressive Alternative: it finishes with Decimate.":
+        "Попробуйте Very Aggressive Alternative — он доводит через Decimate.",
+    "Raise the target, or tune each LOD in SimplyFive Pro.":
+        "Поднимите цель — либо настройте каждый LOD отдельно в SimplyFive Pro.",
+    "Weights and shape keys are not carried": "Веса и шейпкеи не переносятся",
+    "Skinned mesh: weights are not carried": "Скинненый меш: веса не переносятся",
+    "The LOD is baked in the current pose and mix.": "LOD запекается в текущей позе и смеси.",
+    "The LOD is baked in the current pose.": "LOD запекается в текущей позе.",
+    "Transfer is in SimplyFive Pro.": "Перенос есть в SimplyFive Pro.",
+    "Shape keys are not carried": "Шейпкеи не переносятся",
+    "The LOD is baked at the current mix.": "LOD запекается с текущей смесью.",
+    "No triangles left for these materials:": "Не осталось треугольников у материалов:",
+    "The importance mask found no vertex group:": "Маска важности не нашла вертексную группу:",
+    "Extra UV maps were dropped. Turn on Multiple UV Channels to keep them.":
+        "Лишние UV-карты выброшены. Включите «Несколько UV-каналов», чтобы их сохранить.",
+    "Generated objects are named <object><suffix><N>. Your object keeps its name; <object><suffix>0 is a copy of it, and it is hidden.":
+        "Сгенерированные объекты называются <объект><суффикс><N>. Ваш объект сохраняет имя; <объект><суффикс>0 — его копия, и она скрыта.",
+    "Keep the original object": "Сохранять исходный объект",
+    "Generate from a copy instead of renaming your object. The original keeps its name and is hidden in the viewport and the render; the file then holds two copies of the mesh":
+        "Генерировать с копии, не переименовывая ваш объект. Оригинал сохраняет имя и скрывается во вьюпорте и в рендере; в файле при этом лежат две копии меша",
+    "Target": "Цель",
+    "Which unit this level's size is asked for in": "В каких единицах задаётся размер этого уровня",
+    "Tris": "Тр.",
+    "Share of the source triangle count": "Доля от числа треугольников исходника",
+    "An absolute triangle count, the way platform budgets are written":
+        "Абсолютное число треугольников — так записаны бюджеты платформ",
+    "Triangles": "Треугольники",
+    "Triangle count to reduce this LOD to. Counted on the finished object, after welding and any Decimate finish":
+        "До скольких треугольников упростить этот LOD. Считается по готовому объекту, после сварки и добивки через Decimate",
+    "No LOD of their own at some level:": "Без своего LOD на части уровней:",
+    "An empty stands in there.": "Там за них стоит пустышка.",
+    "Hierarchy Note": "Заметка об иерархии",
+    "Parents that have no LOD of their own at some level, so an empty stands in for them there":
+        "Родители, у которых на части уровней нет своего LOD, поэтому там за них стоит пустышка",
     "Regularize": "Регуляризация",
     "Importance Strength": "Сила важности",
     "Details": "Детали",
@@ -21,6 +97,7 @@ TRANSLATIONS_RU = {
     "Merge by Distance": "Слияние по расстоянию",
     "Multiple UV Channels": "Несколько UV-каналов",
     "Mode": "Режим",
+    "Mode:": "Режим:",
     "Naming": "Именование",
     "Return to Edit Mode": "Возвращаться в режим редактирования",
     "Generating leaves Edit Mode, since regeneration replaces the object. With this on, Edit Mode is re-entered on it afterwards":
@@ -32,7 +109,7 @@ TRANSLATIONS_RU = {
     "Normal Weight": "Вес нормалей",
     "Number of LODs": "Количество LOD",
     "Permissive (aggressive)": "Разрешающий (агрессивно)",
-    "Preserve UVs && Normals": "Сохранять UV и нормали",
+    "Preserve UVs & Normals": "Сохранять UV и нормали",
     "Protect UV Seams": "Защищать UV-швы",
     "Prune (aggressive)": "Обрезка (агрессивно)",
     "Target Error": "Целевая ошибка",
@@ -40,8 +117,8 @@ TRANSLATIONS_RU = {
     "Vertex Update (moves UVs, more aggressive)":
         "Обновление вершин (сдвигает UV, агрессивнее)",
     "How many LOD objects to generate": "Сколько объектов LOD создать",
-    "Keep this small - a large value can weld nearby but intentionally separate geometry (e.g. thin gaps) together":
-        "Держите значение небольшим — большое может склеить близко расположенную, но специально разделённую геометрию (например, тонкие щели)",
+    "Keep small: a large value welds intentionally separate geometry across thin gaps":
+        "Держите небольшим: большое значение сваривает специально разделённую геометрию через тонкие щели",
     "Percentage of the original triangle count to keep for this LOD":
         "Процент треугольников от оригинала, который нужно сохранить для этого LOD",
     "Generate LODs": "Сгенерировать LOD",
@@ -52,6 +129,10 @@ TRANSLATIONS_RU = {
         "Выстраивает все существующие LOD этого семейства в ряд, изолируя их в local view (как нажатие '/'), чтобы сравнить прогрессию со стороны. Повторное нажатие, движение слайдера или 'Only This LOD' возвращают всё на место",
     "Nothing to line up - generate some LODs first.":
         "Нечего выстраивать — сначала сгенерируйте LOD.",
+    "Restore Defaults": "Сбросить настройки",
+    "Put every setting in this panel back to the value it ships with. Only the settings - no object is touched, and Ctrl+Z brings the old ones back":
+        "Вернуть все настройки этой панели к исходным значениям. Только настройки — объекты не затрагиваются, а Ctrl+Z вернёт прежние",
+    "Settings restored to defaults.": "Настройки сброшены к исходным.",
     "Show All LODs": "Показать все LOD",
     "Create every configured LOD, from lod_0": "Создать все настроенные LOD, из lod_0",
     "Hide every other LOD in this family. Use 'Show All LODs' to undo":
@@ -108,11 +189,9 @@ TRANSLATIONS_RU = {
         "Переносит на LOD все UV-каналы, сохраняя имена и флаги active/render. Все они входят в метрику ошибки с тем же UV Weight, поэтому лишние швы ограничивают упрощение. Выкл = копируется только активный канал",
     "Weld coincident vertices on the result (Blender's Merge by Distance). UVs and normals are stored per face-corner, so welding does not blend them":
         "Сваривает совпадающие вершины результата (штатный Merge by Distance Blender). UV и нормали хранятся по углу грани, поэтому сварка их не смешивает",
-    "Simulates moving away from the object: 0 = lod_0 (closest), higher = further/more aggressive LODs. Same effect as the 'Only This LOD' buttons":
-        "Имитирует отдаление от объекта: 0 = lod_0 (ближайший), больше = дальние/более агрессивные LOD. То же, что кнопки 'Only This LOD'",
+    "Simulates distance: 0 = lod_0 (closest), higher = further LODs. Same effect as the 'Only This LOD' buttons":
+        "Имитирует дистанцию: 0 = lod_0 (ближайший), больше = дальние LOD. То же, что кнопки 'Only This LOD'",
     "Select a mesh to begin.": "Выберите меш, чтобы начать.",
-    "meshoptimizer: not built yet": "meshoptimizer: ещё не собран",
-    "Build it in Edit > Preferences > Add-ons": "Соберите его в Edit > Preferences > Add-ons",
     "Credits": "Благодарности",
     "Uses meshoptimizer by Arseny Kapoulkine (MIT License).":
         "Использует meshoptimizer от Arseny Kapoulkine (лицензия MIT).",
@@ -129,8 +208,8 @@ TRANSLATIONS_RU = {
     "Keep one copy of each duplicated face when simplifying. The dropped copy takes its material with it, so a material used only by that copy disappears from the LOD - the panel says which":
         "Оставлять одну копию каждой задублированной грани. Отброшенная копия уносит свой материал, поэтому материал, которым пользовалась только она, из LOD исчезнет — панель скажет, какой",
     "Optimize for GPU": "Оптимизировать под видеокарту",
-    "Reorder triangles and vertices the way a GPU reads them (vertex cache, overdraw, fetch locality). Nothing moves in space and no triangle is added or removed - only the order in the file. Also applied to lod_0":
-        "Переставить треугольники и вершины так, как их читает видеокарта (кэш вершин, перерисовка, локальность выборки). Ничего не двигается в пространстве, треугольники не добавляются и не исчезают — меняется только порядок в файле. Применяется и к lod_0",
+    "Reorder triangles and vertices the way a GPU reads them: fewer vertex shader runs and less overdraw in the engine. Applies to every mesh of the family, lod_0 included - that one is your own object, so generating modifies it. Geometry is identical: nothing moves, only the order changes, and it is invisible in Blender":
+        "Переупорядочивает треугольники и вершины так, как их читает видеокарта: меньше работы вершинного шейдера и меньше перерисовки пикселей в движке. Геометрия не меняется вообще — меняется только порядок, в Blender это невидно. Применяется ко всем мешам семьи, включая lod_0 — а это ваш собственный объект, то есть генерация его изменит",
     "Limit Prune": "Ограничить обрезку",
     "UV map blocks simplification": "UV-карта блокирует упрощение",
     "Every face is its own island, which locks": "Каждая грань — свой островок, это запирает",

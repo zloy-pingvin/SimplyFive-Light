@@ -307,6 +307,12 @@ def source_is_flat_shaded(me):
     return bool(flags.all())
 
 
+# Share of flat faces below which the repack is not worth running. It is a
+# whole-mesh rewrite (see repack_flat_custom_normals), so a mesh that is flat
+# only in places pays for all of it and gets nothing back.
+REPACK_FLAT_SHARE = 0.5
+
+
 def repack_flat_custom_normals(me):
     """Re-pack a flat source's custom split normals against a smooth base.
 
@@ -318,13 +324,23 @@ def repack_flat_custom_normals(me):
     the LOD came back the size of the source. Reading the decoded normals and
     writing them back over a smooth base costs under 0.6 degrees anywhere.
 
+    Gated on the share of flat faces, not on "any face is flat":
+    normals_split_custom_set rewrites *every* corner of the mesh, so one stray
+    flat face used to buy the whole rewrite. Measured on a 12.1M-triangle scan
+    holding a single flat face, the call cost 12.58 s and changed nothing - the
+    same 36312387 corners collapsed to the same 6123285 vertices either way. A
+    genuinely flat source is 100% flat and clears the threshold by a mile, so
+    the split is not close; below it the LOD moves by at most 68 triangles in
+    3.03M, in both directions, the repacked normals having been part of the
+    dedup key to within 0.6 degrees.
+
     Only for the mesh from to_mesh(), which is a copy - never the user's own.
     Returns True when it changed anything."""
     if not getattr(me, "has_custom_normals", False) or not len(me.polygons):
         return False
     smooth = np.empty(len(me.polygons), dtype=bool)
     me.polygons.foreach_get("use_smooth", smooth)
-    if smooth.all():
+    if np.count_nonzero(~smooth) < len(smooth) * REPACK_FLAT_SHARE:
         return False
     keep = np.empty(len(me.loops) * 3, dtype=np.float32)
     me.corner_normals.foreach_get("vector", keep)
@@ -332,6 +348,62 @@ def repack_flat_custom_normals(me):
     me.update()
     me.normals_split_custom_set(keep.reshape(-1, 3))
     return True
+
+
+def _dedup_corners(key):
+    """Corners carrying an identical key collapse to one vertex. Returns the
+    new vertex id per corner, and per new vertex the corner it is read from.
+
+    meshopt_generateVertexRemap does the grouping in C when the library has
+    it, fed the same key as raw int64 bytes - no narrowing to int32, the
+    record only has to fit the header's 256-byte limit, and Blender's ceiling
+    of 8 UV maps makes it 21 columns, 168 bytes. The numpy fallback is a
+    lexsort over every column, which is the most expensive operation the
+    add-on runs on its own: 1.584 s against 0.099 s on a 505k-triangle scan.
+
+    Both paths number the vertices by first appearance, so the buffers come
+    out in the order the loop triangles reference them; np.diff checks it
+    rather than trusting it, because a library numbering them any other way
+    would silently reshuffle every buffer instead of failing."""
+    n_corners = len(key)
+    vertex_size = key.shape[1] * key.itemsize
+    fn = native_build.vertex_remap_fn() if vertex_size <= 256 else None
+    if fn is not None:
+        key = np.ascontiguousarray(key)
+        indices = np.empty(n_corners, dtype=np.uint32)
+        indices_ptr, indices = as_c_uint_p(indices)
+        n_unique = int(fn(indices_ptr, None, n_corners,
+                          key.ctypes.data_as(ctypes.c_void_p),
+                          n_corners, vertex_size))
+        # The lowest corner of each group, so anything outside the key - a
+        # color layer - is read from the corner both paths pick. Scattered
+        # back to front, where the last write for an id is the one that wins.
+        corners = np.arange(n_corners, dtype=np.int64)
+        first = np.empty(n_unique, dtype=np.int64)
+        first[indices[::-1]] = corners[::-1]
+        indices = indices.astype(np.int64, copy=False)
+    else:
+        # lexsort reads its keys last-to-first, so the reversed view makes
+        # column 0 the primary one; equal keys then sit next to each other.
+        order = np.lexsort(key.T[::-1])
+        sorted_key = key[order]
+        new_group = np.ones(n_corners, dtype=bool)
+        np.any(sorted_key[1:] != sorted_key[:-1], axis=1, out=new_group[1:])
+        indices = np.empty(n_corners, dtype=np.int64)
+        indices[order] = np.cumsum(new_group) - 1
+        # lexsort is stable, so a group starts on its lowest corner - the
+        # same one the library path takes.
+        first = order[new_group]
+
+    if len(first) > 1 and np.any(np.diff(first) < 0):
+        # Renumber from group order back to first-encounter order. The
+        # fallback always lands here, its groups being ordered by key.
+        appearance = np.argsort(first, kind='stable')
+        rank = np.empty_like(appearance)
+        rank[appearance] = np.arange(len(appearance))
+        indices = rank[indices]
+        first = first[appearance]
+    return indices.astype(np.uint32), first
 
 
 def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
@@ -405,7 +477,7 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
     }
 
     # Every buffer is pulled out of Blender whole (foreach_get) and the dedup
-    # runs as a sort, not as a Python loop over corners: at a few million
+    # runs on whole arrays, not as a Python loop over corners: at a few million
     # triangles the per-corner RNA access alone costs tens of seconds.
     n_corners = len(me.loop_triangles) * 3
     n_loops = len(me.loops)
@@ -455,23 +527,7 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
         key[:, col:col + uv_cols] = np.rint(corner_uv.astype(np.float64) * 1e5)
     key[:, -1] = corner_mat
 
-    # lexsort reads its keys last-to-first, so the reversed view makes column
-    # 0 the primary one; equal keys then sit next to each other.
-    order = np.lexsort(key.T[::-1])
-    sorted_key = key[order]
-    new_group = np.ones(n_corners, dtype=bool)
-    np.any(sorted_key[1:] != sorted_key[:-1], axis=1, out=new_group[1:])
-    indices = np.empty(n_corners, dtype=np.int64)
-    indices[order] = np.cumsum(new_group) - 1
-    first = order[new_group]
-
-    # Renumber from sort order back to first-encounter order, so the buffers
-    # come out in the same order the loop triangles reference them.
-    appearance = np.argsort(first, kind='stable')
-    rank = np.empty_like(appearance)
-    rank[appearance] = np.arange(len(appearance))
-    indices = rank[indices].astype(np.uint32)
-    first = first[appearance]
+    indices, first = _dedup_corners(key)
 
     first_vert = corner_vert[first]
     first_loop = corner_loop[first]
@@ -805,32 +861,41 @@ def _position_groups(positions, scale=1e5):
 
 def build_seam_protect_lock(positions, uvs, has_uv, mat_ids=None,
                              protect_uv=True, protect_material=False):
-    """Equivalent to meshopt_generatePositionRemap + comparing attributes per
-    the docs' 'protect specific seams' recipe - group vertices by position,
+    """The docs' 'protect specific seams' recipe - group vertices by position,
     flag any vertex whose UV or material ID differs from another vertex
     sharing its position. Used with Permissive so the simplifier can collapse
     freely everywhere except across the seams/material boundaries we
     explicitly protect.
 
+    The grouping has to be exact, not quantized: the simplifier reads this
+    array through its own position remap, whose PositionHasher::equal is a
+    per-component float ==, and it only looks at the Protect bit inside the
+    Kind_Seam / Kind_Locked branch that same remap builds. A flag on a vertex
+    meshopt does not consider coincident is therefore never read - rounding
+    only pays for marks nobody looks at. _position_ids matches that ==,
+    -0.0 folded to 0.0 because IEEE calls those equal too.
+
     The two clauses are separate switches: UV seams are an order of magnitude
     more numerous than material boundaries, so protecting materials must not
     cost the price of protecting every UV seam.
 
-    A vertex alone at its position can never differ from the group's
+    A vertex alone at its position can never differ from its own
     representative, so single-vertex groups drop out on their own - no need to
     filter them the way the per-group loop this replaces did."""
     lock = np.zeros(len(positions), dtype=np.uint8)
     if len(positions) == 0:
         return lock
-    order, _, _, rep = _position_groups(positions)
-    differs = np.zeros(len(order), dtype=bool)
+    # A copy: _position_ids folds -0.0 in the array it is handed, and these
+    # positions go on to meshopt untouched.
+    rep = _position_ids(np.array(positions, dtype=np.float32, copy=True))
+    differs = np.zeros(len(positions), dtype=bool)
     if has_uv and protect_uv:
         # np.allclose's tolerances, matching the per-vertex call this replaces
-        same = np.isclose(uvs[order], uvs[rep], rtol=1e-5, atol=1e-5)
+        same = np.isclose(uvs, uvs[rep], rtol=1e-5, atol=1e-5)
         np.logical_or(differs, ~np.all(same, axis=1), out=differs)
     if mat_ids is not None and protect_material:
-        np.logical_or(differs, mat_ids[order] != mat_ids[rep], out=differs)
-    lock[order[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
+        np.logical_or(differs, mat_ids != mat_ids[rep], out=differs)
+    lock[differs] |= native_build.MESHOPT_VERTEX_PROTECT
     lock[rep[differs]] |= native_build.MESHOPT_VERTEX_PROTECT
     return lock
 
@@ -1023,6 +1088,22 @@ def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
         new_uvs = np.array(uvs, dtype=np.float32, copy=True)
 
     return positions, new_indices, new_normals, new_uvs, result_error.value
+
+
+def _target_index_count(index_count, ratio, target_tris=0):
+    """How many indices to ask the library for, from either unit.
+
+    An absolute triangle count is how platform budgets are written, and it
+    does not compound the way a percentage does: 50% of 50% is 25% of the
+    source, while "5000 triangles" is five thousand either way.
+
+    The clamp to index_count is not defensive, it is required:
+    meshopt_simplify* asserts on target_index_count > index_count, and on
+    Windows that assert is a modal dialog on top of Blender."""
+    count = int(target_tris) * 3 if target_tris else int(index_count * ratio)
+    count = max(3, count)
+    count -= count % 3
+    return min(count, index_count)
 
 
 def mesh_tri_count(me):
@@ -1360,6 +1441,144 @@ def deselect_mesh_elements(me):
         me.attributes.remove(attr)
 
 
+# A material slot that gave away at least this share of the source and got
+# nothing back is reported. Set against the noise that must NOT be reported:
+# measured on the multi-material car, a grille of 16 triangles is 0.06% and a
+# refraction slot of 4 is 0.016%, while a real loss on the 149k character is
+# 5.7% of the source.
+GONE_SHARE = 0.005
+
+
+def _face_material_indices(me):
+    """Per-face material slot, read off the attribute rather than the polygon
+    collection: material_index has been a generic face attribute since 4.1,
+    and going through MeshPolygon costs 0.0505 s against 0.0069 s on a 505k
+    mesh for identical values. A mesh that was never given materials has no
+    such attribute, and every face is slot 0."""
+    n_poly = len(me.polygons)
+    attr = me.attributes.get("material_index")
+    if attr is not None and len(attr.data) == n_poly:
+        out = np.zeros(n_poly, dtype=np.int32)
+        attr.data.foreach_get("value", out)
+        return out
+    out = np.zeros(n_poly, dtype=np.int32)
+    try:
+        me.polygons.foreach_get("material_index", out)
+    except Exception:
+        pass
+    return out
+
+
+def _slot_triangle_counts(me, slots):
+    """Triangles per material slot on a mesh: foreach_get and one bincount, no
+    Python loop and no triangulation pass.
+
+    A polygon of n corners becomes n-2 triangles, so weighting by
+    loop_total - 2 gives exactly what counting loop_triangles would, without
+    paying for calc_loop_triangles - which used to be the whole cost here,
+    0.005 s on a 25k mesh and growing. Same trick mesh_tri_count uses for the
+    panel.
+
+    On an all-triangle mesh - every LOD this add-on builds, and most scan
+    sources - loop_total is not read at all: three loops per face is the only
+    way len(loops) can be 3 * len(polygons), and that saves another 0.017 s
+    on a 505k mesh."""
+    n_poly = len(me.polygons)
+    if not n_poly:
+        return np.zeros(slots, dtype=np.int64)
+    poly_mat = np.clip(_face_material_indices(me), 0, slots - 1)
+    if len(me.loops) == 3 * n_poly:
+        return np.bincount(poly_mat, minlength=slots).astype(np.int64)
+    loop_total = np.empty(n_poly, dtype=np.int32)
+    me.polygons.foreach_get("loop_total", loop_total)
+    return np.bincount(poly_mat, weights=np.maximum(loop_total - 2, 0),
+                       minlength=slots).astype(np.int64)
+
+
+def material_retention(src_me, lod_me):
+    """How many triangles each material slot handed to simplification, and how
+    many it got back. None unless there are at least two slots in play.
+
+    Counted off the two meshes rather than off the buffers, deliberately. The
+    tempting shortcut is to read a triangle's material from its first corner,
+    on the strength of the invariant build_object_from_buffers states: the
+    dedup key contains the material, so all three corners of a triangle share
+    it. That holds on the way in and NOT on the way out - measured on the
+    multi-material car at Standard/25%, 24403 of 24403 input triangles agree
+    across their corners and only 9943 of 11097 output ones do, because Vertex
+    Update merges vertices and a merged vertex carries one material. Reading
+    the first corner put thousands of triangles in the wrong slot and had the
+    table announce that the car had lost its paint while the LOD was using it.
+
+    Two foreach_gets and two bincounts per mesh: 0.0002 s on 17k triangles."""
+    if src_me is None or lod_me is None:
+        return None
+    slots = max(len(src_me.materials), len(lod_me.materials))
+    if slots < 2:
+        return None
+    return {"gave": _slot_triangle_counts(src_me, slots),
+            "got": _slot_triangle_counts(lod_me, slots)}
+
+
+def materials_gone(retention, materials):
+    """Names of the slots that gave triangles and got none back, above the
+    noise floor. A whole part missing from the LOD is a failure even when the
+    triangle count came out fine, so it has to be said out loud."""
+    if not retention:
+        return []
+    gave, got = retention["gave"], retention["got"]
+    total = float(gave.sum()) or 1.0
+    out = []
+    for slot in range(len(gave)):
+        if gave[slot] and not got[slot] and gave[slot] / total >= GONE_SHARE:
+            mat = materials[slot] if materials and slot < len(materials) else None
+            out.append(mat.name if mat is not None else "slot %d" % slot)
+    return out
+
+
+# A slot that kept this much of its own triangles did not collapse, and is
+# only worth naming when it is at least STUCK_SHARE of the mesh. Pro measured
+# the split: a genuinely locked part comes back at 94.1-100% (eyelashes, brows,
+# hair cards, the flat bottom of a scan), while the slowest slot that is not
+# locked - a car interior - is 65.5%.
+STUCK_KEPT = 0.85
+STUCK_SHARE = 0.02
+
+
+def stuck_materials(retention, materials):
+    """Slots that handed triangles to simplification and got nearly all of
+    them back.
+
+    Returns ([(name, kept, share of the LOD)], share they occupy together).
+    Both figures are kept: the panel names retention on a missed count and
+    share of the result on a level that hit its number.
+
+    The share is what makes this worth reporting: a part that refuses to
+    collapse is paid for by cutting everything else harder, so it can be a
+    small slice of the source and most of the LOD."""
+    if not retention:
+        return [], 0.0
+    gave, got = retention["gave"], retention["got"]
+    total_src = float(gave.sum()) or 1.0
+    total_lod = float(got.sum()) or 1.0
+    names, lod_tris = [], 0
+    for slot in range(len(gave)):
+        if not gave[slot] or not got[slot]:
+            continue
+        if got[slot] / float(gave[slot]) < STUCK_KEPT:
+            continue
+        if gave[slot] / total_src < STUCK_SHARE:
+            continue
+        mat = materials[slot] if materials and slot < len(materials) else None
+        names.append((mat.name if mat is not None else "slot %d" % slot,
+                      got[slot] / float(gave[slot]),
+                      got[slot] / total_lod))
+        lod_tris += int(got[slot])
+    # Biggest share of the result first: the panel prints only the top few.
+    names.sort(key=lambda row: row[2], reverse=True)
+    return names, lod_tris / total_lod
+
+
 def build_object_from_buffers(name, collections, positions, faces, normals=None, uvs=None,
                                materials=None, mat_ids=None, uv_info=None,
                                colors=None, color_info=None, corner_attr=None):
@@ -1474,7 +1693,7 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                      smooth_crease_angle=SMOOTH_CREASE_ANGLE,
                      skip_unwrapped_uv=False, drop_duplicates=False,
                      gpu_order=False, source_scan=None,
-                     preprune_budget=1.0, retarget_steps=0):
+                     preprune_budget=1.0, retarget_steps=0, target_tris=0):
     eval_obj, me = get_evaluated_mesh(context, src)
     # The scan the operator took on lod_0. Both checks are whole-mesh passes
     # costing seconds at a million triangles, so every LOD after the first
@@ -1498,6 +1717,14 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     new_colors = None
     uv_info = None
     color_info = None
+    # Codes, not sentences: the panel turns them into fixed phrases so each one
+    # is translated on its own, and only a finished level knows which of them
+    # happened - the Mode can switch a pass on behind the user's back.
+    notes = []
+    # Counted while the evaluated mesh is alive; to_mesh_clear() runs in the
+    # finally below, so nothing after it may touch `me`.
+    src_slot_tris = None
+    n_slots = 0
     try:
         # Materials must come from the evaluated object/mesh - the same data
         # mat_ids are read from. src.data.materials misses materials that are
@@ -1516,12 +1743,16 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             elif slot_i < len(me.materials):
                 mat = me.materials[slot_i]
             materials.append(mat.original if mat is not None else None)
+        n_slots = max(len(materials), len(me.materials))
+        if n_slots > 1:
+            src_slot_tris = _slot_triangle_counts(me, n_slots)
         # The group is picked by name, never guessed, so on a rigged mesh the
         # bone weight groups are simply left alone.
         vgroup_weights = None
         if use_attributes and use_vcolor_importance and importance_source == 'VGROUP':
             vgroup_weights = read_vertex_group_weights(eval_obj, me, importance_vgroup)
             if vgroup_weights is None:
+                notes.append(("mask_group", importance_vgroup))
                 print(f"[LOD Generator] Importance vertex group "
                       f"'{importance_vgroup}' not found on {src.name} - "
                       f"simplifying without an importance mask.")
@@ -1542,6 +1773,11 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             # makes meshopt protect noise and spend the budget on slivers.
             normal_weight = 0.0
         if use_attributes:
+            # Every production source in the test set with more than one
+            # material also has more than one UV map, so this is not an edge
+            # case - it is the default on real assets.
+            if not use_multi_uv and len(me.uv_layers) > 1:
+                notes.append(("uv_dropped", len(me.uv_layers) - 1))
             (positions, normals, uvs, indices, uv_info, mat_ids,
              importance, has_color, colors, color_info) = mesh_to_attribute_buffers(
                 me, use_multi_uv, vgroup_weights, key_normals=not flat_source,
@@ -1551,8 +1787,7 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             colors_arg = colors if color_info["names"] else None
             # Percentage and reported 'before' stay against the source, so
             # dropping duplicates below does not quietly shrink either.
-            target_index_count = max(3, int(len(indices) * ratio))
-            target_index_count -= target_index_count % 3
+            target_index_count = _target_index_count(len(indices), ratio, target_tris)
             if drop_duplicates:
                 indices, dropped = drop_duplicate_faces(positions, indices,
                                                         keep=dup_keep)
@@ -1608,6 +1843,13 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     # pre-prune that takes more than the LOD asked to keep would
                     # otherwise hand the library a target it asserts on.
                     target_index_count = min(target_index_count, len(indices))
+                    # The count the report calls "before": the target was
+                    # computed against the source, so the source is what has to
+                    # be reported, not what is left after this pass. Skipped if
+                    # the duplicate drop above already put the real number
+                    # there - it runs first and its count is the true source.
+                    if source_index_count is None:
+                        source_index_count = len(indices) + removed * 3
             options = apply_sparse_option(options, positions, indices)
 
             if use_vertex_update:
@@ -1655,8 +1897,7 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     colors_arg, imp_arg)
         else:
             positions, indices = mesh_to_position_buffers(me)
-            target_index_count = max(3, int(len(indices) * ratio))
-            target_index_count -= target_index_count % 3
+            target_index_count = _target_index_count(len(indices), ratio, target_tris)
             if preprune_threshold > 0.0:
                 indices, used_thr, removed = apply_preprune(
                     positions, indices, preprune_threshold, preprune_budget)
@@ -1667,6 +1908,13 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                           f"{removed} triangles{note}")
                     # See the same clamp on the attribute path above.
                     target_index_count = min(target_index_count, len(indices))
+                    # The count the report calls "before": the target was
+                    # computed against the source, so the source is what has to
+                    # be reported, not what is left after this pass. Skipped if
+                    # the duplicate drop above already put the real number
+                    # there - it runs first and its count is the true source.
+                    if source_index_count is None:
+                        source_index_count = len(indices) + removed * 3
             options = apply_sparse_option(options, positions, indices)
             simplified, result_error = native_simplify_positions(
                 positions, indices, target_index_count, target_error, options)
@@ -1827,4 +2075,29 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # its work, so clearing the selection any earlier would be undone.
     deselect_mesh_elements(obj.data)
 
-    return obj, before_tris, after_tris, result_error
+    # Diagnostics only, and it must stay that way: a raise in here would come
+    # out as "No LODs were generated" on a level that generated perfectly
+    # well, which is exactly what happened when this read the freed mesh.
+    retention = None
+    stuck, stuck_share = [], 0.0
+    try:
+        if src_slot_tris is not None:
+            retention = {"gave": src_slot_tris,
+                         "got": _slot_triangle_counts(obj.data, n_slots)}
+        gone = materials_gone(retention, materials)
+        if gone:
+            notes.append(("gone", ", ".join(gone)))
+            print(f"[LOD Generator] {obj.name}: no triangles left for "
+                  f"{len(gone)} material(s): {', '.join(gone)}")
+        stuck, stuck_share = stuck_materials(retention, materials)
+        if stuck:
+            named = ", ".join("%s %.0f%%" % (nm, 100.0 * share)
+                              for nm, _, share in stuck)
+            print(f"[LOD Generator] {obj.name}: {named} did not "
+                  f"collapse - {stuck_share * 100:.1f}% of the level")
+    except Exception as exc:
+        print(f"[LOD Generator] material report skipped on {obj.name}: {exc}")
+    report = {"notes": notes, "retention": retention,
+              "stuck": stuck, "stuck_share": stuck_share}
+
+    return obj, before_tris, after_tris, result_error, report

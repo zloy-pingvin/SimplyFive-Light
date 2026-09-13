@@ -107,6 +107,53 @@
     padding: 0.42rem 0.7rem; cursor: pointer; backdrop-filter: blur(6px);
   }
   .icon-btn:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  /* language picker: same pill as .icon-btn, with a drawn chevron */
+  select.icon-btn {
+    appearance: none; -webkit-appearance: none;
+    padding: 0.42rem 1.6rem 0.42rem 0.75rem; max-width: 9.5rem;
+    line-height: 1.2; text-align: left; text-align-last: left;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%237d8698' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.62rem center; background-size: 9px 6px;
+    color-scheme: dark;  /* the native dropdown list, not the pill */
+  }
+  /* border only: `color` here would be inherited by the popup's options */
+  select.icon-btn:hover, select.icon-btn:focus-visible { border-color: var(--accent-2); color: var(--hero-text); }
+  /* system colours follow color-scheme, so the popup matches the theme */
+  select.icon-btn option { background-color: Canvas; color: CanvasText; }
+  :root[data-theme="light"] select.icon-btn { color-scheme: light; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) select.icon-btn { color-scheme: light; } }
+
+  /* ---- sticky CTA bar: appears once the hero buttons scroll out of sight ---- */
+  .stickybar {
+    position: fixed; inset: 0 0 auto 0; z-index: 15;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+    transform: translateY(-100%); opacity: 0; pointer-events: none;
+    transition: transform .28s ease, opacity .28s ease;
+  }
+  .stickybar.on { transform: none; opacity: 1; pointer-events: auto; }
+  .stickybar .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding-block: 0.6rem; padding-right: 7.5rem;
+  }
+  .stickybar .brand-lockup { font-size: 1rem; text-decoration: none; flex: none; }
+  .stickybar .bar-cta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .stickybar .btn { padding: 0.5rem 0.9rem; font-size: 0.8rem; }
+  /* hero palette is always dark; the bar sits on the page background, so repaint */
+  .stickybar .brand-lockup .s1 { color: var(--text); }
+  .stickybar .btn-ghost { border-color: var(--line); color: var(--text); background: transparent; }
+  .stickybar .btn-ghost:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  @media (max-width: 860px) {
+    .stickybar .brand-lockup { display: none; }
+    .stickybar .bar { justify-content: flex-end; padding-right: 6.5rem; }
+  }
+  @media (max-width: 620px) {
+    .stickybar .bar { padding-right: 6rem; gap: 0.4rem; }
+    .stickybar .btn { padding: 0.45rem 0.7rem; font-size: 0.72rem; }
+    .stickybar .btn-hideable { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .stickybar { transition: none; } }
 
   /* ---- brand lockup ---- */
   .brand-lockup { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 800; letter-spacing: -0.02em; }
@@ -146,6 +193,10 @@
   .btn-ghost { border-color: var(--hero-line); color: var(--hero-text); background: rgba(255,255,255,0.02); }
   .btn-ghost:hover { border-color: var(--accent-2); }
   .btn .tag { opacity: 0.7; font-weight: 400; }
+  /* placeholder button: no href, so nothing to click - this only shows it */
+  .btn-soon { background: none; border-color: var(--line); color: var(--text-dim);
+    cursor: default; pointer-events: none; }
+  .btn-soon:hover { transform: none; }
 
   .ver-row {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem;
@@ -203,12 +254,52 @@
     text-transform: uppercase; color: var(--hero-dim);
   }
   #lodCanvas { display: block; width: 100%; height: auto; }
-  .shot-wrap { margin-top: 1.4rem; }
   .shot-stage { aspect-ratio: 1040 / 300; }
   .shot-stage .shot-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius); }
   .shot-stage .shot-hint { display: none; }
   .shot-stage.missing { display: flex; align-items: center; justify-content: center; }
   .shot-stage.missing .shot-hint { display: block; color: var(--hero-dim); font-family: var(--mono); font-size: .85rem; }
+
+  /* why: media column left, copy right */
+  .why-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: clamp(1.5rem, 4vw, 3rem); align-items: stretch; }
+  /* two equal frames filling the row height */
+  .why-media { display: grid; grid-template-rows: 1fr 1fr; gap: clamp(0.8rem, 2vw, 1.2rem); min-height: clamp(22rem, 34vw, 32rem); }
+  .why-shot { margin-top: 0; aspect-ratio: auto; min-height: 0; }
+  .why-copy { align-self: center; }
+  .why-copy .statement { max-width: 20ch; margin-top: 0.35rem; }
+  .why-copy .lede { max-width: 46ch; }
+  @media (max-width: 860px) {
+    .why-grid { grid-template-columns: 1fr; }
+    .why-copy { order: -1; }
+    .why-media { min-height: 0; }
+    .why-shot { aspect-ratio: 16 / 10; }
+  }
+
+  /* skinning: copy left, one frame right */
+  .skin-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: clamp(1.5rem, 4vw, 3rem); align-items: center; }
+  /* portrait capture: keep its own proportions, cap the height instead of cropping */
+  .skin-shot { margin-top: 0; display: flex; align-items: center; justify-content: center; }
+  .skin-shot img {
+    display: block; width: auto; height: auto; max-width: 100%;
+    max-height: clamp(26rem, 46vw, 40rem); object-fit: contain; border-radius: var(--radius);
+    aspect-ratio: 764 / 1158;  /* matches the file: reserves the space before it loads */
+  }
+  .skin-copy .statement { max-width: 20ch; margin-top: 0.35rem; }
+  .skin-copy .lede { max-width: 50ch; }
+  .chip.pro { border-color: color-mix(in srgb, var(--accent-2) 55%, transparent); color: var(--accent-2); }
+  @media (max-width: 860px) { .skin-grid { grid-template-columns: 1fr; } }
+
+  /* details: skinning layout, but the capture is landscape — give it more width */
+  .skin-grid.grid-wide { grid-template-columns: 1fr 1.15fr; }
+  @media (max-width: 860px) { .skin-grid.grid-wide { grid-template-columns: 1fr; } }
+
+  /* captures that must not be cropped */
+  .fit-shot .shot-img, .fit-shot img { object-fit: contain; background: transparent; }
+  /* frames keeping their own proportions instead of splitting the row in half */
+  .why-media.rows-auto { grid-template-rows: none; grid-auto-rows: auto; min-height: 0; }
+  .ar-shot { aspect-ratio: var(--ar); min-height: 0; }
+  /* a tall portrait capture: cap its width, or the height runs away */
+  .shot-narrow { width: min(100%, 20.4rem); justify-self: center; }
 
   /* ---------- sections ---------- */
   section { padding-block: clamp(3rem, 7vw, 5.5rem); }
@@ -216,6 +307,8 @@
   .statement { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; max-width: 26ch; }
   .lede { max-width: 64ch; color: var(--text-dim); margin-top: 1.2rem; font-size: var(--step-1); line-height: 1.55; }
   .lede b { color: var(--text); font-weight: 600; }
+  .lede a { color: var(--accent-2); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent); }
+  .lede a:hover { border-color: var(--accent-2); }
   .two-col { display: grid; grid-template-columns: 1fr 1.3fr; gap: clamp(1.5rem, 5vw, 4rem); align-items: start; }
   @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
 
@@ -271,9 +364,13 @@
   .reveal.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
 
-  .strip { display: flex; flex-wrap: wrap; gap: 2rem 3rem; align-items: center; justify-content: space-between; }
-  .strip .big { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; max-width: 38ch; color: var(--text); }
-  .strip p { margin: 0; color: var(--text-dim); max-width: 36ch; }
+  /* one column: nothing here is a two-column pair */
+  .strip { display: block; }
+  .strip .big { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; max-width: 30ch; color: var(--text); margin-top: 0.35rem; }
+  .strip p { margin: 0; color: var(--text-dim); max-width: 62ch; }
+  .strip .upd-p { margin-top: 1.2rem; font-size: var(--step-1); line-height: 1.55; }
+  .strip p a { color: var(--accent-2); text-decoration: none; }
+  .strip p a:hover { text-decoration: underline; }
 
   .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin-top: clamp(1.8rem, 4vw, 2.6rem); }
   @media (max-width: 680px) { .pay-grid { grid-template-columns: 1fr; } }
@@ -308,11 +405,26 @@
 
 
 <div class="controls">
-  <div class="seg" role="group" aria-label="Language">
-    <button id="langEn" data-lang="en">EN</button>
-    <button id="langRu" data-lang="ru">RU</button>
-  </div>
+  <select id="langSel" class="icon-btn" aria-label="Language">
+    <option value="en">English</option>
+    <option value="ru">Русский</option>
+    <option value="de">Deutsch</option>
+    <option value="es">Español</option>
+    <option value="ja">日本語</option>
+    <option value="zh">中文</option>
+  </select>
   <button class="icon-btn" id="themeToggle" aria-label="Toggle colour theme">◐</button>
+</div>
+
+<div class="stickybar" id="stickyBar">
+  <div class="wrap bar">
+    <a class="brand-lockup" href="#top" aria-label="SimplyFive"><span class="wm"><span class="s1">Simply</span><span class="s2">Five</span></span></a>
+    <div class="bar-cta">
+      <a class="btn btn-primary" href="#pricing" data-i18n-html="cta.get">Get SimplyFive PRO <span class="tag">&rarr;</span></a>
+      <a class="btn btn-ghost" href="https://github.com/zloy-pingvin/SimplyFive-Light/releases/latest" data-link="light" data-i18n="cta.light">Try SimplyFive Light</a>
+      <a class="btn btn-ghost btn-hideable" href="docs.html" data-i18n="cta.docs">User Manual</a>
+    </div>
+  </div>
 </div>
 
 <header class="hero">
@@ -333,7 +445,7 @@
     </div>
 
     <div class="ver-row">
-      <span class="ver-now"><span data-i18n="ver.label">Current version</span>: <b>v1.3.9</b></span>
+      <span class="ver-now"><span data-i18n="ver.label">Current version</span>: <b>v1.4.1</b></span>
       <a class="ver-link" href="changelog.html" data-i18n="ver.btn">View changes →</a>
     </div>
 
@@ -352,12 +464,20 @@
 </header>
 
 <section class="band">
-  <div class="wrap two-col">
-    <div class="reveal">
+  <div class="wrap why-grid">
+    <div class="why-media reveal">
+      <div class="lod-stage shot-stage why-shot">
+        <img class="shot-img" alt="LOD chain generated by SimplyFive" loading="lazy" data-base="media/why-lods">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot">
+        <img class="shot-img" alt="meshoptimizer simplification" loading="lazy" data-base="media/why-simplify">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+    <div class="why-copy reveal">
       <p class="eyebrow" data-i18n="why.eyebrow">Why it's different</p>
       <h2 class="statement" data-i18n="why.head">It never uses the Decimate modifier's algorithms.</h2>
-    </div>
-    <div class="reveal">
       <p class="lede" data-i18n-html="why.body">
         Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn't touch it<sup class="fn"><a href="#whyFoot">*</a></sup> — it
         relies on the <b>meshoptimizer</b> algorithms instead, which preserve <b>normals</b> and
@@ -373,55 +493,186 @@
       </div>
     </div>
   </div>
+</section>
 
-  <div class="wrap shot-wrap">
-    <div class="lod-stage shot-stage" id="showStage">
-      <img class="shot-img" alt="SimplyFive add-on in Blender" loading="lazy" data-base="media/showcase">
-      <span class="shot-hint"></span>
+<section id="skinning">
+  <div class="wrap skin-grid">
+    <div class="skin-copy reveal">
+      <p class="eyebrow" data-i18n="skin.eyebrow">Skinned geometry</p>
+      <h2 class="statement" data-i18n="skin.head">The LOD comes back bound to the skeleton.</h2>
+      <p class="lede" data-i18n-html="skin.body">A character LOD is useless if it arrives unbound. <b>Transfer Vertex Groups</b> copies the source's vertex groups onto every level: a LOD vertex is a source vertex that survived, so it inherits that vertex's weights whole. Nothing is blended — every weight is one the source really had. If the mesh is bound to an armature, the binding is copied too. <b>Shape keys</b> can be carried as well, onto the near levels or onto all of them, with names and order kept.</p>
+      <div class="chips">
+        <span class="chip pro" data-i18n="chip.proonly">PRO only</span>
+        <span class="chip" data-i18n="chip.vgroups">Vertex groups</span>
+        <span class="chip" data-i18n="chip.rigged">Arrives rigged</span>
+        <span class="chip" data-i18n="chip.keys">Shape keys</span>
+      </div>
+    </div>
+    <div class="lod-stage skin-shot reveal">
+      <img src="media/1.4.1-skinning.gif" width="764" height="1158" alt="A rigged character LOD generated by SimplyFive, still bound to its armature" loading="lazy">
     </div>
   </div>
-  <script>
-  (function () {
-    var stage = document.getElementById('showStage'); if (!stage) return;
-    var img = stage.querySelector('.shot-img'), hint = stage.querySelector('.shot-hint');
-    var base = img.getAttribute('data-base'), EXTS = ['png', 'webp', 'avif', 'jpg', 'jpeg', 'gif'], i = 0;
-    function next() {
-      if (i >= EXTS.length) {
-        stage.classList.add('missing'); img.remove();
-        if (hint) hint.textContent = base.replace(/^media\//, '') + '.*  — drop a screenshot here';
-        return;
-      }
-      img.src = base + '.' + EXTS[i++];
-    }
-    img.addEventListener('error', next); next();
-  })();
-  </script>
+</section>
+
+
+<section id="batch" class="band">
+  <div class="wrap why-grid">
+    <div class="why-media rows-auto reveal">
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 1519 / 846">
+        <img class="shot-img" alt="SimplyFive batch queue generating several objects in one run" loading="lazy" data-base="media/1.4.1-batch-queue">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 1439 / 953">
+        <img class="shot-img" alt="Per-task settings in the batch queue" loading="lazy" data-base="media/batch-2">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+    <div class="why-copy reveal">
+      <p class="eyebrow" data-i18n="batch.eyebrow">Whole scenes at once</p>
+      <h2 class="statement" data-i18n="batch.head">Set it up once, queue the entire scene.</h2>
+      <p class="lede" data-i18n-html="batch.body">Every selected mesh becomes a task carrying its own copy of the settings on screen, and each task can be set up on its own. Settings can also be applied to a whole group of parts once they are already in the queue. The queue has its own preview, the same one a single mesh gets. The colour of a row says where the task stands: <b>grey</b> — not run yet, <b>green</b> — done, <b>red</b> — done, but with a warning worth a look.</p>
+      <div class="chips">
+        <span class="chip pro" data-i18n="chip.proonly">PRO only</span>
+        <span class="chip" data-i18n="chip.queue">Batch queue</span>
+        <span class="chip" data-i18n="chip.clearui">Clear UI</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section id="remesh">
+  <div class="wrap skin-grid grid-wide">
+    <div class="skin-copy reveal">
+      <p class="eyebrow" data-i18n="rem.eyebrow">When topology is the problem</p>
+      <h2 class="statement" data-i18n="rem.head">Remesh.</h2>
+      <p class="lede" data-i18n-html="rem.body">Three algorithms in the add-on rebuild the mesh from scratch while holding on to the silhouette. <b>Sloppy</b> is the rough one: it ignores topology and cuts as far as it can. <b>Voxel Remesh</b> rebuilds the surface on a voxel grid instead of collapsing edges: holes close, sliver triangles go, the result is watertight, and anything smaller than a voxel merges away — only positions survive. And the plain <b>meshoptimizer</b> pass with the UV and normal weights switched off: the same edge collapse, but with no regard for texture or shading.</p>
+      <div class="chips">
+        <span class="chip pro" data-i18n="chip.proonly">PRO only</span>
+        <span class="chip" data-i18n="chip.sloppy">Sloppy</span>
+        <span class="chip" data-i18n="chip.voxel">Voxel Remesh</span>
+      </div>
+    </div>
+    <div class="why-media rows-auto reveal">
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot shot-narrow" style="--ar: 666 / 1294">
+        <img class="shot-img" alt="Remesh and Sloppy settings in the SimplyFive panel" loading="lazy" data-base="media/remesh-1">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<section id="scans" class="band">
+  <div class="wrap why-grid">
+    <div class="why-media rows-auto reveal">
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 1229 / 1344">
+        <img class="shot-img" alt="A photogrammetry scan simplified with the Scan preset" loading="lazy" data-base="media/Scan-1">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 1099 / 857">
+        <img class="shot-img" alt="Scan preset settings" loading="lazy" data-base="media/Scan-2">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+    <div class="why-copy reveal">
+      <p class="eyebrow" data-i18n="scan.eyebrow">Photogrammetry</p>
+      <h2 class="statement" data-i18n="scan.head">Scans keep their shape, their UVs and their colors.</h2>
+      <p class="lede" data-i18n-html="scan.body">Photogrammetry hands you millions of triangles, noisy normals and detail that lives in the texture and the vertex colors rather than in the shape. The <b>Scan</b> preset is built for exactly that: shape, UV layout and vertex colors come first, normal accuracy is what it spends, and an aggressive pre-prune pass clears the scanning debris before simplification starts. <b>Accurate Vertex Colors</b> blends color along each collapse instead of keeping the surviving vertex's, so a painted gradient no longer comes out in steps. On a scan the result comes out far cleaner than anything Decimate leaves behind.</p>
+      <div class="chips">
+        <span class="chip pro" data-i18n="chip.proonly">PRO only</span>
+        <span class="chip" data-i18n="chip.debris">Clears scan debris</span>
+        <span class="chip" data-i18n="chip.vcol">Accurate vertex colors</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="workflow">
+  <div class="wrap skin-grid grid-wide">
+    <div class="why-copy reveal">
+      <p class="eyebrow" data-i18n="ui.eyebrow">Workflow</p>
+      <h2 class="statement" data-i18n="ui.head">Judge it in the viewport, rebuild one level at a time.</h2>
+      <p class="lede" data-i18n-html="ui.body">A distance slider steps through the levels in place, <b>Only This LOD</b> isolates one, and <b>Line Up LODs</b> lays the whole family out in a row — in local view, each row spaced by its own subtree — so the progression is judged side by side rather than guessed at. Unhappy with level 3 alone? Change its settings and press <b>Generate This LOD</b>: that one level is rebuilt, the rest stay exactly as they are.</p>
+      <div class="chips">
+        <span class="chip" data-i18n="chip.preview">Distance preview</span>
+        <span class="chip" data-i18n="chip.lineup">Line Up LODs</span>
+        <span class="chip" data-i18n="chip.single">Single-level rebuild</span>
+      </div>
+    </div>
+    <div class="why-media rows-auto reveal">
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 1799 / 541">
+        <img class="shot-img" alt="LOD Preview distance slider with Only This LOD and Show All LODs" loading="lazy" data-base="media/07-lod-preview">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 962 / 696">
+        <img class="shot-img" alt="Generate This LOD rebuilding a single level" loading="lazy" data-base="media/08-generate-single">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 500 / 232">
+        <img class="shot-img" alt="" loading="lazy" data-base="media/workflow-3">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<section id="details" class="band">
+  <div class="wrap why-grid">
+    <div class="why-media rows-auto reveal">
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 961 / 622">
+        <img class="shot-img" alt="Expanding the Details block of a LOD level and saving the configuration as a preset" loading="lazy" data-base="media/09-presets">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 676 / 205">
+        <img class="shot-img" alt="The panel explaining why a level missed its target and which setting to change" loading="lazy" data-base="media/1.4.1-result-report">
+        <span class="shot-hint"></span>
+      </div>
+      <div class="lod-stage shot-stage why-shot ar-shot fit-shot" style="--ar: 936 / 525">
+        <img class="shot-img" alt="A LOD level rebuilt with hand-set Details parameters" loading="lazy" data-base="media/details-3">
+        <span class="shot-hint"></span>
+      </div>
+    </div>
+    <div class="skin-copy reveal">
+      <p class="eyebrow" data-i18n="det.eyebrow">Nothing is a black box</p>
+      <h2 class="statement" data-i18n="det.head">Every level opens up, every dial is yours.</h2>
+      <p class="lede" data-i18n-html="det.body">The built-in modes cover most cases — a level's mode is itself a preset over the algorithm's settings. When they aren't enough — the model breaks up, the texture drifts, or too many polygons stay behind — expand <b>Details</b> under that level's mode and set the parameters by hand: <b>Target Error</b>, <b>Lock Border</b>, <b>Protect UV Seams</b>, the normal and UV weights, the prune passes. Between them you can shape a level into exactly what you want. When a level misses its target, the panel says how many triangles were asked for and how many came out, what refused to collapse — by material name — and which setting to move. A combination that works can be saved as a global preset and put on the next model in one click, and the level modes themselves can be reshaped to your own defaults in the add-on preferences. Every parameter is described in detail in <a href="docs.html?edition=pro#details">the manual</a>.</p>
+      <div class="chips">
+        <span class="chip pro" data-i18n="chip.proedit">Editing &amp; presets: PRO</span>
+        <span class="chip" data-i18n="chip.perlevel">Per-level Details</span>
+        <span class="chip" data-i18n="chip.presets">Saved presets</span>
+        <span class="chip" data-i18n="chip.hints">It tells you what got stuck</span>
+      </div>
+    </div>
+  </div>
 </section>
 
 <section id="compare">
   <div class="wrap">
     <p class="eyebrow" data-i18n="cmp.eyebrow">PRO vs Light</p>
     <h2 class="statement" data-i18n="cmp.head">What's the difference between PRO and Light?</h2>
-    <p class="lede" data-i18n="cmp.lede">Light is a genuinely useful free build. PRO unlocks per-LOD control and the advanced meshoptimizer options.</p>
+    <p class="lede" data-i18n="cmp.lede">Light is a complete add-on; PRO adds more control and features.</p>
     <div class="cmp" id="cmpTable"></div>
   </div>
 </section>
 
 <section class="band">
   <div class="wrap strip reveal">
-    <div>
-      <p class="eyebrow" data-i18n="upd.eyebrow">Free updates</p>
-      <p class="big" data-i18n="upd.big">If you buy SimplyFive PRO, future updates are free — they ship with the product.</p>
-    </div>
-    <p data-i18n="upd.p"></p>
+    <p class="eyebrow" data-i18n="upd.eyebrow">Free updates &amp; support</p>
+    <p class="big" data-i18n="upd.big">If you buy SimplyFive PRO, future updates are free — they ship with the product.</p>
+    <p class="upd-p" data-i18n-html="upd.p">And you are not left alone with it: write to me on <a href="https://t.me/zloy_pingvin" target="_blank" rel="noopener">Telegram</a> or by <a href="mailto:zloy.tux@gmail.com">email</a> about anything at all — a bug, a mesh that will not simplify, a question about settings or a feature you need. I answer personally, and the requests that come in are what the next version gets built from.</p>
   </div>
 </section>
 
 <section id="pricing">
   <div class="wrap">
     <p class="eyebrow" data-i18n="buy.eyebrow">Get SimplyFive</p>
-    <h2 class="statement" data-i18n="buy.head">Two ways to pay, wherever you are.</h2>
-    <p class="lede" data-i18n="buy.lede">Pick the checkout that fits your region. Both deliver the same add-on and the same free updates.</p>
+    <h2 class="statement" data-i18n="buy.head">Four ways to pay, wherever you are.</h2>
+    <p class="lede" data-i18n-html="buy.lede">Pick the checkout that fits your region. They all deliver the same add-on and the same free updates.</p>
 
     <div class="pay-grid">
       <div class="pay-card feat reveal">
@@ -437,6 +688,22 @@
         <p data-i18n="buy.boosty.p">Card payment for Russia &amp; CIS. Instant access, no foreign account or crypto wallet needed.</p>
         <div class="price"><span class="price-old" data-i18n="buy.boosty.old">$14</span><span class="price-now" data-i18n="buy.boosty.now">$6</span><span class="sale" data-i18n="buy.sale">sale</span></div>
         <a class="btn btn-primary" href="https://boosty.to/zloy_pingvin/posts/a56878a8-fbbf-4546-a40b-b1b503676e20" target="_blank" rel="noopener" data-i18n="buy.boosty.btn">Buy on Boosty</a>
+      </div>
+      <div class="pay-card reveal">
+        <span class="region" data-i18n="buy.gumroad.region">International</span>
+        <h3>Gumroad</h3>
+        <p data-i18n="buy.gumroad.p">Card or PayPal checkout, worldwide. Instant download.</p>
+        <div class="price"><span class="price-now">$14</span></div>
+        <!-- TODO: real product URL, then swap btn-soon for btn-primary and the label back -->
+        <span class="btn btn-soon" data-i18n="buy.gumroad.btn">Coming soon</span>
+      </div>
+      <div class="pay-card reveal">
+        <span class="region" data-i18n="buy.hive.region">International</span>
+        <h3>Superhive Market</h3>
+        <p data-i18n="buy.hive.p">The Blender marketplace, formerly Blender Market. Card or PayPal.</p>
+        <div class="price"><span class="price-now">$14</span></div>
+        <!-- TODO: real product URL, then swap btn-soon for btn-primary and the label back -->
+        <span class="btn btn-soon" data-i18n="buy.hive.btn">Coming soon</span>
       </div>
     </div>
   </div>
@@ -479,11 +746,35 @@
       "why.body": 'Most Blender LOD add-ons lean on the <b>Decimate modifier</b>. SimplyFive doesn\'t touch it<sup class="fn"><a href="#whyFoot">*</a></sup> — it relies on the <b>meshoptimizer</b> algorithms instead, which preserve <b>normals</b> and <b>UV&nbsp;unwrapping</b> far better while they reduce geometry. Quality comparable to well-known commercial tools, it\'s <b>fast</b>, and everything runs <b>locally</b>: no internet connection, no questionable licenses like the ones similar products ship with.',
       "why.foot": '<b>*</b> Almost never — since <b>1.2.7</b> the optional <b>“Very Aggressive Alternative”</b> mode (<b>Finish with Decimate</b>) runs a short Decimate pass only at the very end, to reach the exact target triangle&nbsp;% when meshoptimizer stalls on UV / normal seams. Every other mode stays pure meshoptimizer. <a href="changelog.html#v1-2-7">See the changelog →</a>',
       "chip.shading": "Shading-aware", "chip.uv": "UV-preserving", "chip.local": "100% local", "chip.fast": "Fast",
+      "skin.eyebrow": "Skinned geometry",
+      "skin.head": "The LOD comes back bound to the skeleton.",
+      "skin.body": 'A character LOD is useless if it arrives unbound. <b>Transfer Vertex Groups</b> copies the source\'s vertex groups onto every level: a LOD vertex is a source vertex that survived, so it inherits that vertex\'s weights whole. Nothing is blended — every weight is one the source really had. If the mesh is bound to an armature, the binding is copied too. <b>Shape keys</b> can be carried as well, onto the near levels or onto all of them, with names and order kept.',
+      "chip.proonly": "PRO only", "chip.vgroups": "Vertex groups", "chip.rigged": "Arrives rigged", "chip.keys": "Shape keys",
+      "batch.eyebrow": "Whole scenes at once",
+      "batch.head": "Set it up once, queue the entire scene.",
+      "batch.body": 'Every selected mesh becomes a task carrying its own copy of the settings on screen, and each task can be set up on its own. Settings can also be applied to a whole group of parts once they are already in the queue. The queue has its own preview, the same one a single mesh gets. The colour of a row says where the task stands: <b>grey</b> — not run yet, <b>green</b> — done, <b>red</b> — done, but with a warning worth a look.',
+      "chip.queue": "Batch queue", "chip.clearui": "Clear UI",
+      "det.eyebrow": "Nothing is a black box",
+      "det.head": "Every level opens up, every dial is yours.",
+      "det.body": 'The built-in modes cover most cases — a level\'s mode is itself a preset over the algorithm\'s settings. When they aren\'t enough — the model breaks up, the texture drifts, or too many polygons stay behind — expand <b>Details</b> under that level\'s mode and set the parameters by hand: <b>Target Error</b>, <b>Lock Border</b>, <b>Protect UV Seams</b>, the normal and UV weights, the prune passes. Between them you can shape a level into exactly what you want. When a level misses its target, the panel says how many triangles were asked for and how many came out, what refused to collapse — by material name — and which setting to move. A combination that works can be saved as a global preset and put on the next model in one click, and the level modes themselves can be reshaped to your own defaults in the add-on preferences. Every parameter is described in detail in <a href="docs.html?edition=pro#details">the manual</a>.',
+      "chip.proedit": "Editing & presets: PRO", "chip.perlevel": "Per-level Details", "chip.presets": "Saved presets", "chip.hints": "It tells you what got stuck",
+      "ui.eyebrow": "Workflow",
+      "ui.head": "Judge it in the viewport, rebuild one level at a time.",
+      "ui.body": 'A distance slider steps through the levels in place, <b>Only This LOD</b> isolates one, and <b>Line Up LODs</b> lays the whole family out in a row — in local view, each row spaced by its own subtree — so the progression is judged side by side rather than guessed at. Unhappy with level 3 alone? Change its settings and press <b>Generate This LOD</b>: that one level is rebuilt, the rest stay exactly as they are.',
+      "chip.preview": "Distance preview", "chip.lineup": "Line Up LODs", "chip.single": "Single-level rebuild",
+      "rem.eyebrow": "When topology is the problem",
+      "rem.head": "Remesh.",
+      "rem.body": 'Three algorithms in the add-on rebuild the mesh from scratch while holding on to the silhouette. <b>Sloppy</b> is the rough one: it ignores topology and cuts as far as it can. <b>Voxel Remesh</b> rebuilds the surface on a voxel grid instead of collapsing edges: holes close, sliver triangles go, the result is watertight, and anything smaller than a voxel merges away — only positions survive. And the plain <b>meshoptimizer</b> pass with the UV and normal weights switched off: the same edge collapse, but with no regard for texture or shading.',
+      "chip.sloppy": "Sloppy", "chip.voxel": "Voxel Remesh",
+      "scan.eyebrow": "Photogrammetry",
+      "scan.head": "Scans keep their shape, their UVs and their colors.",
+      "scan.body": 'Photogrammetry hands you millions of triangles, noisy normals and detail that lives in the texture and the vertex colors rather than in the shape. The <b>Scan</b> preset is built for exactly that: shape, UV layout and vertex colors come first, normal accuracy is what it spends, and an aggressive pre-prune pass clears the scanning debris before simplification starts. <b>Accurate Vertex Colors</b> blends color along each collapse instead of keeping the surviving vertex\'s, so a painted gradient no longer comes out in steps. On a scan the result comes out far cleaner than anything Decimate leaves behind.',
+      "chip.debris": "Clears scan debris", "chip.vcol": "Accurate vertex colors",
       "feat.eyebrow": "What SimplyFive can do",
       "feat.head": "Ten controls that treat a LOD like a mesh, not a mistake.",
       "cmp.eyebrow": "PRO vs Light",
       "cmp.head": "What's the difference between PRO and Light?",
-      "cmp.lede": "Light is a complete, fully-functional add-on. PRO adds more control for a perfect result.",
+      "cmp.lede": "Light is a complete add-on; PRO adds more control and features.",
       "cmp.lg.full": "included", "cmp.lg.part": "limited in Light", "cmp.lg.none": "PRO only",
       "f1.k": "Levels", "f1.h": "Up to 5 LODs per object", "f1.p": "Each level gets its own target triangle percentage and full set of simplification parameters.",
       "f2.k": "Presets", "f2.h": "5 aggressiveness presets", "f2.p": 'From <b>Careful</b> to <b>Clear Simplify</b>, plus a Custom mode when you want to dial it in yourself.',
@@ -495,11 +786,13 @@
       "f8.k": "Naming", "f8.h": "Configurable suffix", "f8.p": 'Set the LOD name suffix in Preferences — the default is <span style="font-family:var(--mono)">_lod_</span>.',
       "f9.k": "Review", "f9.h": "Preview & Line Up", "f9.p": "In-viewport LOD preview, plus a review mode that lays every level out in a row, isolated in local view.",
       "f10.k": "Presets", "f10.h": "Save full configs", "f10.p": "Store and load complete configurations as named Blender presets — and there's more beyond this list.",
-      "upd.eyebrow": "Free updates", "upd.big": "If you buy SimplyFive PRO, future updates are free — they ship with the product.", "upd.p": "",
-      "buy.eyebrow": "Get SimplyFive PRO", "buy.head": "Two ways to pay, wherever you are.", "buy.lede": "Pick the checkout that fits your region — both deliver SimplyFive PRO with the same free updates. Prefer the free version? SimplyFive Light lives on the Blender Extensions Platform.",
+      "upd.eyebrow": "Free updates & support", "upd.big": "If you buy SimplyFive PRO, future updates are free — they ship with the product.", "upd.p": 'And you are not left alone with it: write to me on <a href="https://t.me/zloy_pingvin" target="_blank" rel="noopener">Telegram</a> or by <a href="mailto:zloy.tux@gmail.com">email</a> about anything at all — a bug, a mesh that will not simplify, a question about settings or a feature you need. I answer personally, and the requests that come in are what the next version gets built from.',
+      "buy.eyebrow": "Get SimplyFive PRO", "buy.head": "Four ways to pay, wherever you are.", "buy.lede": 'Pick the checkout that fits your region — they all deliver SimplyFive PRO with the same free updates. Prefer the free version? SimplyFive Light is a free download on <a href="https://github.com/zloy-pingvin/SimplyFive-Light/releases" target="_blank" rel="noopener">GitHub Releases</a>.',
       "buy.boosty.region": "RU / CIS + International", "buy.boosty.p": "Card payment — works for Russia, CIS and international cards. Instant access. Discount for Boosty subscribers.", "buy.boosty.btn": "Buy on Boosty", "buy.boosty.old": "$14", "buy.boosty.now": "$6",
       "buy.sale": "sale",
       "buy.stars.region": "International", "buy.stars.p": "Pay with Telegram Stars from anywhere — right inside Telegram, no card or crypto wallet needed.", "buy.stars.btn": "Pay with Telegram Stars",
+      "buy.gumroad.region": "International", "buy.gumroad.p": "Card or PayPal checkout, worldwide. Instant download.", "buy.gumroad.btn": "Coming soon",
+      "buy.hive.region": "International", "buy.hive.p": "The Blender marketplace, formerly Blender Market. Card or PayPal.", "buy.hive.btn": "Coming soon",
       "nav.features": "PRO vs Light", "nav.buy": "Buy", "nav.docs": "User Manual", "nav.news": "News", "nav.email": "Email",
       "foot.contact": "Contact the seller here:",
       "foot.small": 'Supports Blender 4.2+ · Powered by <a href="https://github.com/zeux/meshoptimizer" target="_blank" rel="noopener">meshoptimizer</a> (by Arseny Kapoulkine, MIT License) · © 2026 SimplyFive'
@@ -520,11 +813,35 @@
       "why.body": 'Большинство LOD-аддонов для Blender опираются на <b>модификатор Decimate</b>. SimplyFive его не использует<sup class="fn"><a href="#whyFoot">*</a></sup> — вместо этого он полагается на алгоритмы <b>meshoptimizer</b>, которые заметно лучше сохраняют <b>нормали</b> и <b>UV-развёртку</b> при упрощении геометрии. Качество на уровне известных коммерческих инструментов, работает <b>быстро</b> и полностью <b>локально</b>: без интернета и без сомнительных лицензий, как у похожих продуктов.',
       "why.foot": '<b>*</b> Почти никогда — начиная с <b>1.2.7</b> опциональный режим <b>«Very Aggressive Alternative»</b> (<b>Finish with Decimate</b>) в самом конце запускает короткий проход Decimate, чтобы попасть в точный целевой&nbsp;% треугольников, когда meshoptimizer застревает на швах UV / нормалей. Все остальные режимы — чистый meshoptimizer. <a href="changelog.html#v1-2-7">Смотреть чейнджлог →</a>',
       "chip.shading": "Сохраняет шейдинг", "chip.uv": "Бережёт UV", "chip.local": "100% локально", "chip.fast": "Быстро",
+      "skin.eyebrow": "Геометрия со скиннингом",
+      "skin.head": "LOD возвращается привязанным к скелету.",
+      "skin.body": 'LOD персонажа бесполезен, если приходит без привязки. <b>Transfer Vertex Groups</b> копирует группы вершин исходника на каждый уровень: вершина LOD — это уцелевшая вершина исходника, поэтому она наследует её веса целиком. Ничего не смешивается, каждый вес — тот, что реально был в исходнике. Если меш привязан к арматуре, переносится и сама привязка. <b>Шейпкеи</b> при желании можно переносить на ближние уровни или на все — с сохранением имён и порядка.',
+      "chip.proonly": "Только в PRO", "chip.vgroups": "Группы вершин", "chip.rigged": "Сразу с ригом", "chip.keys": "Шейпкеи",
+      "batch.eyebrow": "Сразу вся сцена",
+      "batch.head": "Настроили один раз — поставили в очередь всю сцену.",
+      "batch.body": 'Каждый выделенный меш становится задачей со своей копией настроек с экрана, и каждую задачу можно настроить отдельно. Настройки можно применить и сразу к группе деталей, когда они уже в очереди. У очереди своё превью — такое же, как у одиночного меша. Статус задачи виден по цвету строки: <b>серая</b> — не выполнена, <b>зелёная</b> — выполнена, <b>красная</b> — выполнена, но есть предупреждение, на которое стоит посмотреть.',
+      "chip.queue": "Пакетная очередь", "chip.clearui": "Понятный UI",
+      "det.eyebrow": "Никаких чёрных ящиков",
+      "det.head": "Каждый уровень раскрывается, каждый параметр — ваш.",
+      "det.body": 'Встроенных режимов хватает в большинстве случаев — сами уровни и есть пресеты над настройками алгоритма. Когда их не хватает — модель «ломается», текстура плывёт или остаётся слишком много полигонов — разверните <b>Details</b> под режимом уровня и выставьте параметры руками: <b>Target Error</b>, <b>Lock Border</b>, <b>Protect UV Seams</b>, веса нормалей и UV, проходы prune. Всё это позволяет собрать LOD ровно таким, каким вы его хотите. Если уровень не дошёл до цели, панель пишет, сколько треугольников просили и сколько вышло, что не схлопнулось — с именами материалов — и какую настройку менять. Подходящую комбинацию можно сохранить в глобальный пресет и применить к следующей модели в один клик, а сами режимы уровней при желании настраиваются под себя — в настройках аддона. Подробнее каждый параметр описан в <a href="docs.html?edition=pro#details">документации</a>.',
+      "chip.proedit": "Правка и пресеты — PRO", "chip.perlevel": "Details на каждый уровень", "chip.presets": "Пресеты", "chip.hints": "Подскажет, что застряло",
+      "ui.eyebrow": "Рабочий процесс",
+      "ui.head": "Оценивайте прямо во вьюпорте и пересобирайте по одному уровню.",
+      "ui.body": 'Ползунок дистанции листает уровни на месте, <b>Only This LOD</b> оставляет на виду один, а <b>Line Up LODs</b> выстраивает всю семью в ряд — в local view, с шагом по поддереву каждого уровня — чтобы сравнивать прогрессию бок о бок, а не на глаз. Не устроил только третий уровень? Поменяйте его настройки и нажмите <b>Generate This LOD</b>: пересоберётся он один, остальные останутся как были.',
+      "chip.preview": "Превью по дистанции", "chip.lineup": "Line Up LODs", "chip.single": "Пересборка одного уровня",
+      "rem.eyebrow": "Когда мешает сама топология",
+      "rem.head": "Пересобрать поверхность.",
+      "rem.body": 'В аддоне три алгоритма, которые пересобирают меш заново, сохраняя силуэт модели. <b>Sloppy</b> — грубый: игнорирует топологию и режет по максимуму. <b>Voxel Remesh</b> перестраивает поверхность на воксельной сетке вместо схлопывания рёбер: дырки закрываются, иглы-треугольники исчезают, результат водонепроницаемый, а всё мельче вокселя сливается; выживают только позиции. И базовый проход <b>meshoptimizer</b> с выключенными весами UV и нормалей: то же схлопывание рёбер, но без оглядки на текстуру и затенение.',
+      "chip.sloppy": "Sloppy", "chip.voxel": "Voxel Remesh",
+      "scan.eyebrow": "Фотограмметрия",
+      "scan.head": "Скан сохраняет форму, UV и цвета вершин.",
+      "scan.body": 'Фотограмметрия отдаёт миллионы треугольников, шумные нормали и деталь, которая живёт в текстуре и вертексных цветах, а не в форме. Режим <b>Scan</b> сделан ровно под это: форма, UV-развёртка и цвета вершин важнее всего, точность нормалей — то, чем он платит, а агрессивный предварительный проход prune убирает мусор сканирования до начала упрощения. <b>Accurate Vertex Colors</b> смешивает цвет вдоль каждого схлопывания вместо того, чтобы оставлять цвет уцелевшей вершины, — закрашенный градиент больше не выходит ступеньками. На скане результат выходит заметно аккуратнее, чем после Decimate.',
+      "chip.debris": "Убирает мусор скана", "chip.vcol": "Точные вертексные цвета",
       "feat.eyebrow": "Что умеет SimplyFive",
       "feat.head": "Десять инструментов, для которых LOD — полноценный меш, а не компромисс.",
       "cmp.eyebrow": "PRO и Light",
       "cmp.head": "Чем отличаются PRO и Light?",
-      "cmp.lede": "Light — полноценный полнофункциональный аддон. PRO добавляет больший контроль для идеального результата.",
+      "cmp.lede": "Light — полноценный аддон, PRO — больше контроля и возможностей.",
       "cmp.lg.full": "есть", "cmp.lg.part": "ограничено в Light", "cmp.lg.none": "только в PRO",
       "f1.k": "Уровни", "f1.h": "До 5 LOD на объект", "f1.p": "У каждого уровня свой целевой процент треугольников и полный набор параметров упрощения.",
       "f2.k": "Пресеты", "f2.h": "5 пресетов агрессивности", "f2.p": 'От <b>Careful</b> до <b>Clear Simplify</b>, плюс режим Custom, когда хочется настроить всё вручную.',
@@ -536,52 +853,554 @@
       "f8.k": "Имена", "f8.h": "Настраиваемый суффикс", "f8.p": 'Задайте суффикс имени LOD в настройках — по умолчанию <span style="font-family:var(--mono)">_lod_</span>.',
       "f9.k": "Обзор", "f9.h": "Превью и Line Up", "f9.p": "Превью LOD прямо во вьюпорте плюс режим обзора, который раскладывает все уровни в ряд, изолированно в local view.",
       "f10.k": "Пресеты", "f10.h": "Сохранение конфигураций", "f10.p": "Сохраняйте и загружайте полные конфигурации как именованные пресеты Blender — и это не всё.",
-      "upd.eyebrow": "Бесплатные обновления", "upd.big": "Если вы купили SimplyFive PRO, будущие обновления бесплатны — они поставляются вместе с продуктом.", "upd.p": "",
-      "buy.eyebrow": "Получить SimplyFive PRO", "buy.head": "Два способа оплаты — откуда угодно.", "buy.lede": "Выберите вариант под свой регион — оба дают SimplyFive PRO с теми же бесплатными обновлениями. Нужна бесплатная версия? SimplyFive Light доступен на Blender Extensions Platform.",
+      "upd.eyebrow": "Бесплатные обновления и поддержка", "upd.big": "Если вы купили SimplyFive PRO, будущие обновления бесплатны — они поставляются вместе с продуктом.", "upd.p": 'И вы с ним не наедине: пишите мне в <a href="https://t.me/zloy_pingvin" target="_blank" rel="noopener">Telegram</a> или на <a href="mailto:zloy.tux@gmail.com">почту</a> по любому вопросу — баг, меш, который не хочет упрощаться, вопрос по настройкам или нужная вам функция. Отвечаю лично, и именно из этих обращений собирается следующая версия.',
+      "buy.eyebrow": "Получить SimplyFive PRO", "buy.head": "Четыре способа оплаты — откуда угодно.", "buy.lede": 'Выберите вариант под свой регион — все дают SimplyFive PRO с теми же бесплатными обновлениями. Нужна бесплатная версия? SimplyFive Light можно бесплатно скачать в <a href="https://github.com/zloy-pingvin/SimplyFive-Light/releases" target="_blank" rel="noopener">GitHub Releases</a>.',
       "buy.boosty.region": "РФ / СНГ + межд. карты", "buy.boosty.p": "Оплата картой — Россия, СНГ и международные карты. Мгновенный доступ. Подписчикам Boosty — скидка.", "buy.boosty.btn": "Купить на Boosty", "buy.boosty.old": "1000 ₽", "buy.boosty.now": "500 ₽",
       "buy.sale": "акция",
       "buy.stars.region": "Международно", "buy.stars.p": "Оплата через Telegram Stars из любой точки мира — прямо в Telegram, без карты и криптокошелька.", "buy.stars.btn": "Оплатить Telegram Stars",
+      "buy.gumroad.region": "Международно", "buy.gumroad.p": "Оплата картой или PayPal, из любой страны. Мгновенная загрузка.", "buy.gumroad.btn": "Скоро",
+      "buy.hive.region": "Международно", "buy.hive.p": "Маркетплейс для Blender, бывший Blender Market. Карта или PayPal.", "buy.hive.btn": "Скоро",
       "nav.features": "PRO и Light", "nav.buy": "Купить", "nav.docs": "Руководство пользователя", "nav.news": "Новости", "nav.email": "Email",
       "foot.contact": "Связаться с продавцом можно тут:",
       "foot.small": 'Поддержка Blender 4.2+ · На базе <a href="https://github.com/zeux/meshoptimizer" target="_blank" rel="noopener">meshoptimizer</a> (автор Arseny Kapoulkine, лицензия MIT) · © 2026 SimplyFive'
+    }
+,
+    de: {
+      "_title": "SimplyFive — LOD-Generator für Blender",
+      "batch.body": "Jedes ausgewählte Mesh wird zu einer Aufgabe mit einer eigenen Kopie der Einstellungen vom Bildschirm, und jede Aufgabe lässt sich einzeln einrichten. Einstellungen können auch auf eine ganze Gruppe von Teilen angewendet werden, wenn diese bereits in der Warteschlange stehen. Die Warteschlange hat ihre eigene Vorschau — dieselbe wie bei einem einzelnen Mesh. Die Farbe einer Zeile zeigt den Stand: <b>grau</b> — noch nicht ausgeführt, <b>grün</b> — fertig, <b>rot</b> — fertig, aber mit einem Hinweis, den man sich ansehen sollte.",
+      "batch.eyebrow": "Ganze Szenen auf einmal",
+      "batch.head": "Einmal einstellen, die ganze Szene in die Warteschlange.",
+      "buy.boosty.btn": "Auf Boosty kaufen",
+      "buy.boosty.now": "$6",
+      "buy.boosty.old": "$14",
+      "buy.boosty.p": "Kartenzahlung — funktioniert für Russland, die GUS und internationale Karten. Sofortiger Zugang. Rabatt für Boosty-Abonnenten.",
+      "buy.boosty.region": "RU / GUS + International",
+      "buy.eyebrow": "SimplyFive PRO holen",
+      "buy.gumroad.btn": "Demnächst",
+      "buy.gumroad.p": "Kasse mit Karte oder PayPal, weltweit. Sofortiger Download.",
+      "buy.gumroad.region": "International",
+      "buy.head": "Vier Wege zu bezahlen, wo immer Sie sind.",
+      "buy.hive.btn": "Demnächst",
+      "buy.hive.p": "Der Blender-Marktplatz, früher Blender Market. Karte oder PayPal.",
+      "buy.hive.region": "International",
+      "buy.lede": "Wählen Sie die Kasse, die zu Ihrer Region passt — alle liefern SimplyFive PRO mit denselben kostenlosen Updates. Lieber die kostenlose Version? SimplyFive Light gibt es gratis auf <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a>.",
+      "buy.sale": "Rabatt",
+      "buy.stars.btn": "Mit Telegram Stars zahlen",
+      "buy.stars.p": "Von überall mit Telegram Stars bezahlen — direkt in Telegram, ohne Karte oder Krypto-Wallet.",
+      "buy.stars.region": "International",
+      "chip.clearui": "Klares UI",
+      "chip.debris": "Räumt Scan-Schutt weg",
+      "chip.fast": "Schnell",
+      "chip.hints": "Sagt, woran es hängt",
+      "chip.keys": "Shape Keys",
+      "chip.lineup": "Line Up LODs",
+      "chip.local": "100 % lokal",
+      "chip.perlevel": "Details je Stufe",
+      "chip.presets": "Gespeicherte Presets",
+      "chip.preview": "Distanz-Vorschau",
+      "chip.proedit": "Bearbeiten & Presets: PRO",
+      "chip.proonly": "Nur in PRO",
+      "chip.queue": "Stapelverarbeitung",
+      "chip.rigged": "Kommt geriggt zurück",
+      "chip.shading": "Shading-treu",
+      "chip.single": "Einzelne Stufe neu bauen",
+      "chip.sloppy": "Sloppy",
+      "chip.uv": "UV-schonend",
+      "chip.vcol": "Genaue Vertex-Farben",
+      "chip.vgroups": "Vertex-Gruppen",
+      "chip.voxel": "Voxel Remesh",
+      "cmp.eyebrow": "PRO gegen Light",
+      "cmp.head": "Worin unterscheiden sich PRO und Light?",
+      "cmp.lede": "Light ist ein vollwertiges Add-on; PRO bringt mehr Kontrolle und Funktionen.",
+      "cmp.lg.full": "enthalten",
+      "cmp.lg.none": "nur in PRO",
+      "cmp.lg.part": "in Light eingeschränkt",
+      "cta.docs": "Handbuch",
+      "cta.get": "SimplyFive PRO kaufen <span class=\"tag\">→</span>",
+      "cta.light": "SimplyFive Light testen",
+      "det.body": "Die eingebauten Modi decken die meisten Fälle ab — der Modus einer Stufe ist selbst ein Preset über den Einstellungen des Algorithmus. Wenn sie nicht reichen — das Modell bricht auf, die Textur verrutscht oder es bleiben zu viele Polygone — klappen Sie <b>Details</b> unter dem Modus dieser Stufe auf und setzen die Parameter von Hand: <b>Target Error</b>, <b>Lock Border</b>, <b>Protect UV Seams</b>, die Gewichte für Normalen und UV, die Prune-Durchläufe. Damit formen Sie eine Stufe genau so, wie Sie sie haben wollen. Verfehlt eine Stufe ihr Ziel, sagt das Panel, wie viele Dreiecke angefordert waren und wie viele herauskamen, was sich nicht zusammenfalten ließ — mit Materialnamen — und welche Einstellung zu ändern ist. Eine Kombination, die funktioniert, lässt sich als globales Preset speichern und mit einem Klick auf das nächste Modell anwenden, und die Stufen-Modi selbst können in den Add-on-Einstellungen auf eigene Vorgaben umgebaut werden. Jeder Parameter ist im <a href=\"docs.html?edition=pro#details\">Handbuch</a> ausführlich beschrieben.",
+      "det.eyebrow": "Keine Black Box",
+      "det.head": "Jede Stufe klappt auf, jeder Regler gehört Ihnen.",
+      "f1.h": "Bis zu 5 LODs pro Objekt",
+      "f1.k": "Stufen",
+      "f1.p": "Jede Stufe bekommt ihren eigenen Ziel-Prozentsatz an Dreiecken und den vollen Satz an Vereinfachungsparametern.",
+      "f10.h": "Ganze Konfigurationen sichern",
+      "f10.k": "Presets",
+      "f10.p": "Komplette Konfigurationen als benannte Blender-Presets speichern und laden — und diese Liste ist nicht alles.",
+      "f2.h": "5 Stärke-Presets",
+      "f2.k": "Presets",
+      "f2.p": "Von <b>Careful</b> bis <b>Clear Simplify</b>, dazu ein Custom-Modus, wenn Sie selbst nachjustieren wollen.",
+      "f3.h": "Attribut-bewusst",
+      "f3.k": "Attribute",
+      "f3.p": "Erhält UVs und Normalen mit einstellbaren Gewichten, inklusive der verketteten Betriebsart „Build from Previous LOD“.",
+      "f4.h": "Mehrere UV-Kanäle",
+      "f4.k": "UV",
+      "f4.p": "Übertragen Sie jeden UV-Kanal auf die LODs oder nur den aktiven — der Originalname bleibt immer erhalten.",
+      "f5.h": "Vertex-Farben",
+      "f5.k": "Farbe",
+      "f5.p": "Jede Farbebene wird pro Vertex übertragen und kann zugleich als Wichtigkeitsmaske dienen: weiches Gewicht und/oder harte Sperre.",
+      "f6.h": "Normalen nach Ihrem Willen",
+      "f6.k": "Normalen",
+      "f6.p": "Normalen des Quell-Meshes erhalten oder aus der Geometrie des LODs neu berechnen — über Shade Smooth by Angle.",
+      "f7.h": "Multi-Material",
+      "f7.k": "Materialien",
+      "f7.p": "Kommt mit Materialien auf verknüpften Duplikaten und Instanzen zurecht, ebenso mit denen aus Geometry Nodes.",
+      "f8.h": "Frei wählbarer Suffix",
+      "f8.k": "Benennung",
+      "f8.p": "Den LOD-Namenssuffix in den Preferences setzen — Standard ist <span style=\"font-family:var(--mono)\">_lod_</span>.",
+      "f9.h": "Preview & Line Up",
+      "f9.k": "Prüfen",
+      "f9.p": "LOD-Vorschau im Viewport, dazu ein Prüfmodus, der alle Stufen in einer Reihe aufstellt, isoliert im Local View.",
+      "feat.eyebrow": "Was SimplyFive kann",
+      "feat.head": "Zehn Regler, die ein LOD wie ein Mesh behandeln, nicht wie einen Fehler.",
+      "foot.contact": "Kontakt zum Verkäufer:",
+      "foot.small": "Unterstützt Blender 4.2+ · Basiert auf <a href=\"https://github.com/zeux/meshoptimizer\" target=\"_blank\" rel=\"noopener\">meshoptimizer</a> (von Arseny Kapoulkine, MIT-Lizenz) · © 2026 SimplyFive",
+      "hero.eyebrow": "Blender-Add-on · meshoptimizer",
+      "hero.h1": "SimplyFive <span class=\"accent\">LOD&nbsp;Generator</span> für Blender",
+      "hero.sub": "Ein Blender-Add-on, das aus dem aktiven Objekt einen Satz LOD-Meshes (Level of Detail) erzeugt — mit der Bibliothek <b>meshoptimizer</b>. Pro Mesh sind <b>bis zu 5</b> vereinfachte Stufen möglich, jede mit eigener Stärke; die Vereinfachung berücksichtigt das <b>UV-Layout</b> (auch mehrere UV-Kanäle), <b>Normalen</b>, <b>Vertex-Farben</b> (werden übertragen und lassen sich als Wichtigkeitsmaske nutzen) und <b>Materialien</b>.",
+      "lod.label": "Line Up LODs — eine Silhouette, fünf LODs",
+      "nav.buy": "Kaufen",
+      "nav.docs": "Handbuch",
+      "nav.email": "E-Mail",
+      "nav.features": "PRO gegen Light",
+      "nav.news": "News",
+      "rem.body": "Drei Algorithmen im Add-on bauen das Mesh neu auf und halten dabei die Silhouette. <b>Sloppy</b> ist der grobe: er ignoriert die Topologie und schneidet so weit er kann. <b>Voxel Remesh</b> baut die Oberfläche auf einem Voxelgitter neu auf, statt Kanten zusammenzufalten: Löcher schließen sich, splittrige Dreiecke verschwinden, das Ergebnis ist wasserdicht, und alles kleiner als ein Voxel verschmilzt — nur Positionen überleben. Und der schlichte <b>meshoptimizer</b>-Durchlauf mit abgeschalteten UV- und Normalen-Gewichten: dasselbe Zusammenfalten von Kanten, aber ohne Rücksicht auf Textur und Shading.",
+      "rem.eyebrow": "Wenn die Topologie im Weg steht",
+      "rem.head": "Remesh.",
+      "scan.body": "Photogrammetrie liefert Millionen Dreiecke, verrauschte Normalen und Details, die in der Textur und den Vertex-Farben stecken statt in der Form. Das Preset <b>Scan</b> ist genau dafür gebaut: Form, UV-Layout und Vertex-Farben zuerst, bezahlt wird mit der Genauigkeit der Normalen, und ein aggressiver Pre-Prune-Durchlauf räumt den Scan-Schutt weg, bevor die Vereinfachung beginnt. <b>Accurate Vertex Colors</b> mischt die Farbe entlang jeder Kantenfaltung, statt die des überlebenden Vertex zu behalten — ein gemalter Verlauf kommt nicht mehr stufig heraus. Bei einem Scan ist das Ergebnis deutlich sauberer als alles, was Decimate übrig lässt.",
+      "scan.eyebrow": "Photogrammetrie",
+      "scan.head": "Scans behalten Form, UVs und Vertex-Farben.",
+      "shot.label": "SimplyFive in Blender",
+      "skin.body": "Ein Charakter-LOD ist wertlos, wenn es ohne Bindung ankommt. <b>Transfer Vertex Groups</b> kopiert die Vertex-Gruppen der Quelle auf jede Stufe: ein LOD-Vertex ist ein überlebender Quell-Vertex und erbt dessen Gewichte vollständig. Nichts wird vermischt — jedes Gewicht gab es im Original wirklich. Ist das Mesh an ein Armature gebunden, wird die Bindung mitkopiert. <b>Shape Keys</b> lassen sich ebenfalls übertragen, auf die nahen Stufen oder auf alle, mit erhaltenen Namen und erhaltener Reihenfolge.",
+      "skin.eyebrow": "Geometrie mit Skinning",
+      "skin.head": "Das LOD kommt an das Skelett gebunden zurück.",
+      "ui.body": "Ein Distanz-Regler schaltet die Stufen an Ort und Stelle durch, <b>Only This LOD</b> stellt eine einzelne frei, und <b>Line Up LODs</b> reiht die ganze Familie auf — im Local View, jede Reihe um ihren eigenen Teilbaum versetzt — sodass der Verlauf nebeneinander beurteilt und nicht geraten wird. Nur Stufe 3 gefällt nicht? Deren Einstellungen ändern und <b>Generate This LOD</b> drücken: diese eine Stufe wird neu gebaut, der Rest bleibt unangetastet.",
+      "ui.eyebrow": "Arbeitsablauf",
+      "ui.head": "Im Viewport beurteilen, einzelne Stufen neu bauen.",
+      "upd.big": "Wer SimplyFive PRO kauft, bekommt künftige Updates kostenlos — sie gehören zum Produkt.",
+      "upd.eyebrow": "Kostenlose Updates & Support",
+      "upd.p": "Und Sie bleiben damit nicht allein: schreiben Sie mir auf <a href=\"https://t.me/zloy_pingvin\" target=\"_blank\" rel=\"noopener\">Telegram</a> oder per <a href=\"mailto:zloy.tux@gmail.com\">E-Mail</a> — zu allem: ein Fehler, ein Mesh, das sich nicht vereinfachen lässt, eine Frage zu den Einstellungen oder eine Funktion, die Ihnen fehlt. Ich antworte persönlich, und aus diesen Zuschriften entsteht die nächste Version.",
+      "ver.btn": "Änderungen ansehen →",
+      "ver.label": "Aktuelle Version",
+      "video.embed": "<iframe src=\"https://www.youtube-nocookie.com/embed/zWpD3uTObaE\" title=\"SimplyFive — overview\" loading=\"lazy\" allow=\"accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe>",
+      "video.label": "Video — Einführung in Light & Pro",
+      "why.body": "Die meisten LOD-Add-ons für Blender stützen sich auf den <b>Decimate-Modifikator</b>. SimplyFive rührt ihn nicht an<sup class=\"fn\"><a href=\"#whyFoot\">*</a></sup> — es setzt stattdessen auf die Algorithmen von <b>meshoptimizer</b>, die <b>Normalen</b> und <b>UV-Layout</b> beim Reduzieren deutlich besser erhalten. Qualität auf dem Niveau bekannter kommerzieller Werkzeuge, <b>schnell</b>, und alles läuft <b>lokal</b>: keine Internetverbindung, keine fragwürdigen Lizenzen wie bei vergleichbaren Produkten.",
+      "why.eyebrow": "Was es anders macht",
+      "why.foot": "<b>*</b> Fast nie — seit <b>1.2.7</b> führt der optionale Modus <b>„Very Aggressive Alternative“</b> (<b>Finish with Decimate</b>) ganz am Ende einen kurzen Decimate-Durchlauf aus, um den exakten Ziel-Prozentsatz an Dreiecken zu treffen, wenn meshoptimizer an UV- oder Normalen-Nähten hängen bleibt. Alle anderen Modi bleiben reines meshoptimizer. <a href=\"changelog.html#v1-2-7\">Zum Changelog →</a>",
+      "why.head": "Es nutzt die Algorithmen des Decimate-Modifikators nicht."
+    },
+    es: {
+      "_title": "SimplyFive — generador de LOD para Blender",
+      "batch.body": "Cada malla seleccionada se convierte en una tarea con su propia copia de los ajustes que hay en pantalla, y cada tarea se puede configurar por separado. Los ajustes también se pueden aplicar a todo un grupo de piezas cuando ya están en la cola. La cola tiene su propia previsualización, la misma que recibe una malla suelta. El color de la fila indica el estado: <b>gris</b> — sin ejecutar, <b>verde</b> — hecha, <b>rojo</b> — hecha, pero con un aviso que conviene mirar.",
+      "batch.eyebrow": "La escena entera de una vez",
+      "batch.head": "Configúralo una vez y pon toda la escena en cola.",
+      "buy.boosty.btn": "Comprar en Boosty",
+      "buy.boosty.now": "$6",
+      "buy.boosty.old": "$14",
+      "buy.boosty.p": "Pago con tarjeta — funciona para Rusia, la CEI y tarjetas internacionales. Acceso inmediato. Descuento para suscriptores de Boosty.",
+      "buy.boosty.region": "RU / CEI + Internacional",
+      "buy.eyebrow": "Consigue SimplyFive PRO",
+      "buy.gumroad.btn": "Próximamente",
+      "buy.gumroad.p": "Pago con tarjeta o PayPal, en todo el mundo. Descarga inmediata.",
+      "buy.gumroad.region": "Internacional",
+      "buy.head": "Cuatro formas de pagar, estés donde estés.",
+      "buy.hive.btn": "Próximamente",
+      "buy.hive.p": "El mercado de Blender, antes Blender Market. Tarjeta o PayPal.",
+      "buy.hive.region": "Internacional",
+      "buy.lede": "Elige la pasarela que te encaje — todas entregan SimplyFive PRO con las mismas actualizaciones gratuitas. ¿Prefieres la versión gratis? SimplyFive Light se descarga sin coste en <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a>.",
+      "buy.sale": "oferta",
+      "buy.stars.btn": "Pagar con Telegram Stars",
+      "buy.stars.p": "Paga con Telegram Stars desde cualquier lugar, dentro de Telegram, sin tarjeta ni monedero cripto.",
+      "buy.stars.region": "Internacional",
+      "chip.clearui": "Interfaz clara",
+      "chip.debris": "Limpia la basura del escaneo",
+      "chip.fast": "Rápido",
+      "chip.hints": "Te dice qué se atascó",
+      "chip.keys": "Shape keys",
+      "chip.lineup": "Line Up LODs",
+      "chip.local": "100 % local",
+      "chip.perlevel": "Details por nivel",
+      "chip.presets": "Presets guardados",
+      "chip.preview": "Vista por distancia",
+      "chip.proedit": "Edición y presets: PRO",
+      "chip.proonly": "Solo en PRO",
+      "chip.queue": "Cola por lotes",
+      "chip.rigged": "Llega con el rig",
+      "chip.shading": "Respeta el sombreado",
+      "chip.single": "Rehacer un nivel",
+      "chip.sloppy": "Sloppy",
+      "chip.uv": "Cuida las UV",
+      "chip.vcol": "Colores de vértice precisos",
+      "chip.vgroups": "Grupos de vértices",
+      "chip.voxel": "Voxel Remesh",
+      "cmp.eyebrow": "PRO frente a Light",
+      "cmp.head": "¿En qué se diferencian PRO y Light?",
+      "cmp.lede": "Light es un add-on completo; PRO añade más control y más funciones.",
+      "cmp.lg.full": "incluido",
+      "cmp.lg.none": "solo en PRO",
+      "cmp.lg.part": "limitado en Light",
+      "cta.docs": "Manual de usuario",
+      "cta.get": "Consigue SimplyFive PRO <span class=\"tag\">→</span>",
+      "cta.light": "Prueba SimplyFive Light",
+      "det.body": "Los modos integrados cubren la mayoría de los casos — el modo de un nivel ya es en sí un preset sobre los ajustes del algoritmo. Cuando no bastan — el modelo «se rompe», la textura se desplaza o quedan demasiados polígonos — despliega <b>Details</b> bajo el modo de ese nivel y pon los parámetros a mano: <b>Target Error</b>, <b>Lock Border</b>, <b>Protect UV Seams</b>, los pesos de normales y UV, las pasadas de prune. Con eso puedes dejar el nivel exactamente como lo quieres. Si un nivel no llega a su objetivo, el panel dice cuántos triángulos se pidieron y cuántos salieron, qué se negó a colapsar — con el nombre del material — y qué ajuste mover. Una combinación que funciona se puede guardar como preset global y aplicar al siguiente modelo en un clic, y los propios modos de nivel se pueden rehacer con tus valores en las preferencias del add-on. Cada parámetro está descrito en detalle en el <a href=\"docs.html?edition=pro#details\">manual</a>.",
+      "det.eyebrow": "Nada es una caja negra",
+      "det.head": "Cada nivel se abre, cada parámetro es tuyo.",
+      "f1.h": "Hasta 5 LODs por objeto",
+      "f1.k": "Niveles",
+      "f1.p": "Cada nivel tiene su propio porcentaje de triángulos objetivo y el juego completo de parámetros de simplificación.",
+      "f10.h": "Guarda configuraciones enteras",
+      "f10.k": "Presets",
+      "f10.p": "Guarda y carga configuraciones completas como presets de Blender con nombre — y hay más cosas fuera de esta lista.",
+      "f2.h": "5 presets de agresividad",
+      "f2.k": "Presets",
+      "f2.p": "De <b>Careful</b> a <b>Clear Simplify</b>, más un modo Custom cuando quieras ajustarlo tú.",
+      "f3.h": "Consciente de los atributos",
+      "f3.k": "Atributos",
+      "f3.p": "Conserva UV y normales con pesos ajustables, incluido el modo encadenado «Build from Previous LOD».",
+      "f4.h": "Varios canales UV",
+      "f4.k": "UV",
+      "f4.p": "Lleva todos los canales UV a los LODs o solo el activo — su nombre original siempre se mantiene.",
+      "f5.h": "Colores de vértice",
+      "f5.k": "Color",
+      "f5.p": "Cada capa de color se transfiere por vértice y puede servir además como mapa de importancia: peso suave y/o bloqueo duro.",
+      "f6.h": "Normales a tu manera",
+      "f6.k": "Normales",
+      "f6.p": "Conserva las normales de la malla original o recalcúlalas desde la geometría del propio LOD con Shade Smooth by Angle.",
+      "f7.h": "Soporte multimaterial",
+      "f7.k": "Materiales",
+      "f7.p": "Maneja materiales en duplicados enlazados e instancias, y los que produce Geometry Nodes.",
+      "f8.h": "Sufijo configurable",
+      "f8.k": "Nombres",
+      "f8.p": "Define el sufijo del nombre de LOD en las Preferences — por defecto es <span style=\"font-family:var(--mono)\">_lod_</span>.",
+      "f9.h": "Preview y Line Up",
+      "f9.k": "Revisión",
+      "f9.p": "Previsualización de LOD en el viewport, más un modo de revisión que alinea todos los niveles en fila, aislados en local view.",
+      "feat.eyebrow": "Lo que SimplyFive sabe hacer",
+      "feat.head": "Diez controles que tratan un LOD como una malla, no como un error.",
+      "foot.contact": "Contacta con el vendedor aquí:",
+      "foot.small": "Compatible con Blender 4.2+ · Funciona con <a href=\"https://github.com/zeux/meshoptimizer\" target=\"_blank\" rel=\"noopener\">meshoptimizer</a> (de Arseny Kapoulkine, licencia MIT) · © 2026 SimplyFive",
+      "hero.eyebrow": "Add-on de Blender · meshoptimizer",
+      "hero.h1": "SimplyFive <span class=\"accent\">LOD&nbsp;Generator</span> para Blender",
+      "hero.sub": "Un add-on de Blender que genera un conjunto de mallas LOD (Level of Detail) a partir del objeto activo, usando la librería <b>meshoptimizer</b>. Por cada malla puedes crear <b>hasta 5</b> versiones simplificadas con su propia agresividad; la simplificación tiene en cuenta el <b>mapeado UV</b> (incluidos varios canales UV), las <b>normales</b>, los <b>colores de vértice</b> (se transfieren y sirven como mapa de importancia) y los <b>materiales</b>.",
+      "lod.label": "Line Up LODs — una silueta, cinco LODs",
+      "nav.buy": "Comprar",
+      "nav.docs": "Manual de usuario",
+      "nav.email": "Correo",
+      "nav.features": "PRO frente a Light",
+      "nav.news": "Novedades",
+      "rem.body": "El add-on trae tres algoritmos que reconstruyen la malla desde cero conservando la silueta. <b>Sloppy</b> es el bruto: ignora la topología y corta todo lo que puede. <b>Voxel Remesh</b> reconstruye la superficie sobre una rejilla de vóxeles en vez de colapsar aristas: los agujeros se cierran, los triángulos astillados desaparecen, el resultado es estanco y todo lo menor que un vóxel se funde — solo sobreviven las posiciones. Y la pasada normal de <b>meshoptimizer</b> con los pesos de UV y normales apagados: el mismo colapso de aristas, pero sin mirar la textura ni el sombreado.",
+      "rem.eyebrow": "Cuando estorba la propia topología",
+      "rem.head": "Remesh.",
+      "scan.body": "La fotogrametría entrega millones de triángulos, normales ruidosas y un detalle que vive en la textura y en los colores de vértice más que en la forma. El preset <b>Scan</b> está hecho justo para eso: la forma, el mapeado UV y los colores de vértice van primero, lo que paga es la precisión de las normales, y una pasada agresiva de pre-prune limpia la basura del escaneo antes de que empiece la simplificación. <b>Accurate Vertex Colors</b> mezcla el color a lo largo de cada colapso en vez de quedarse con el del vértice superviviente, así que un degradado pintado ya no sale a escalones. En un escaneo el resultado queda mucho más limpio que cualquier cosa que deje Decimate.",
+      "scan.eyebrow": "Fotogrametría",
+      "scan.head": "El escaneo conserva forma, UV y colores de vértice.",
+      "shot.label": "SimplyFive dentro de Blender",
+      "skin.body": "Un LOD de personaje no sirve de nada si llega sin vínculo. <b>Transfer Vertex Groups</b> copia los grupos de vértices del original en cada nivel: un vértice del LOD es un vértice del original que ha sobrevivido, así que hereda sus pesos enteros. Nada se mezcla: cada peso es uno que el original tenía de verdad. Si la malla está ligada a un armature, el vínculo se copia también. Las <b>shape keys</b> pueden transferirse igualmente, a los niveles cercanos o a todos, conservando nombres y orden.",
+      "skin.eyebrow": "Geometría con skinning",
+      "skin.head": "El LOD vuelve ligado al esqueleto.",
+      "ui.body": "Un deslizador de distancia recorre los niveles en el sitio, <b>Only This LOD</b> aísla uno, y <b>Line Up LODs</b> coloca toda la familia en fila — en local view, cada fila separada según su propio subárbol — para juzgar la progresión lado a lado en vez de adivinarla. ¿Solo el nivel 3 no convence? Cambia sus ajustes y pulsa <b>Generate This LOD</b>: se rehace ese nivel y el resto se queda tal cual.",
+      "ui.eyebrow": "Flujo de trabajo",
+      "ui.head": "Júzgalo en el viewport y rehaz un nivel a la vez.",
+      "upd.big": "Si compras SimplyFive PRO, las actualizaciones futuras son gratis: vienen con el producto.",
+      "upd.eyebrow": "Actualizaciones gratis y soporte",
+      "upd.p": "Y no te quedas solo con ello: escríbeme por <a href=\"https://t.me/zloy_pingvin\" target=\"_blank\" rel=\"noopener\">Telegram</a> o por <a href=\"mailto:zloy.tux@gmail.com\">correo</a> sobre cualquier cosa — un fallo, una malla que no quiere simplificarse, una duda sobre los ajustes o una función que necesitas. Respondo personalmente, y de esos mensajes sale la siguiente versión.",
+      "ver.btn": "Ver cambios →",
+      "ver.label": "Versión actual",
+      "video.embed": "<iframe src=\"https://www.youtube-nocookie.com/embed/zWpD3uTObaE\" title=\"SimplyFive — overview\" loading=\"lazy\" allow=\"accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe>",
+      "video.label": "Vídeo — introducción a Light y Pro",
+      "why.body": "La mayoría de los add-ons de LOD para Blender se apoyan en el <b>modificador Decimate</b>. SimplyFive no lo toca<sup class=\"fn\"><a href=\"#whyFoot\">*</a></sup> — se apoya en los algoritmos de <b>meshoptimizer</b>, que conservan mucho mejor las <b>normales</b> y el <b>mapeado UV</b> mientras reducen la geometría. Calidad comparable a la de herramientas comerciales conocidas, <b>rápido</b>, y todo se ejecuta <b>en local</b>: sin conexión a internet y sin licencias dudosas como las de productos parecidos.",
+      "why.eyebrow": "En qué se diferencia",
+      "why.foot": "<b>*</b> Casi nunca — desde la <b>1.2.7</b> el modo opcional <b>«Very Aggressive Alternative»</b> (<b>Finish with Decimate</b>) ejecuta una pasada corta de Decimate solo al final, para alcanzar el % exacto de triángulos cuando meshoptimizer se atasca en costuras de UV o normales. Los demás modos siguen siendo meshoptimizer puro. <a href=\"changelog.html#v1-2-7\">Ver el changelog →</a>",
+      "why.head": "Nunca usa los algoritmos del modificador Decimate."
+    },
+    ja: {
+      "_title": "SimplyFive — Blender 用 LOD ジェネレーター",
+      "batch.body": "選択した各メッシュが、画面上の設定のコピーを持つタスクになります。タスクごとに個別設定が可能です。すでにキューに入っているパーツのグループに対して、設定をまとめて適用することもできます。キューには単体メッシュと同じプレビューが用意されています。行の色が状態を示します。<b>グレー</b>＝未実行、<b>緑</b>＝完了、<b>赤</b>＝完了したが確認すべき警告あり。",
+      "batch.eyebrow": "シーン全体を一度に",
+      "batch.head": "一度設定すれば、シーン全体をキューに。",
+      "buy.boosty.btn": "Boosty で購入",
+      "buy.boosty.now": "$6",
+      "buy.boosty.old": "$14",
+      "buy.boosty.p": "カード決済 — ロシア、CIS、海外カードに対応。即時アクセス。Boosty 購読者は割引あり。",
+      "buy.boosty.region": "ロシア / CIS + 海外",
+      "buy.eyebrow": "SimplyFive PRO を入手",
+      "buy.gumroad.btn": "近日公開",
+      "buy.gumroad.p": "カードまたは PayPal で世界中から決済。即時ダウンロード。",
+      "buy.gumroad.region": "海外",
+      "buy.head": "どこにいても選べる 4 つの支払い方法。",
+      "buy.hive.btn": "近日公開",
+      "buy.hive.p": "Blender のマーケットプレイス（旧 Blender Market）。カードまたは PayPal。",
+      "buy.hive.region": "海外",
+      "buy.lede": "地域に合う決済を選んでください。どれも同じ無料アップデート付きの SimplyFive PRO が届きます。無料版がよければ、SimplyFive Light を <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> から無料でダウンロードできます。",
+      "buy.sale": "セール",
+      "buy.stars.btn": "Telegram Stars で支払う",
+      "buy.stars.p": "どこからでも Telegram Stars で支払い。Telegram の中で完結し、カードも暗号資産ウォレットも不要です。",
+      "buy.stars.region": "海外",
+      "chip.clearui": "分かりやすい UI",
+      "chip.debris": "スキャンのゴミを除去",
+      "chip.fast": "高速",
+      "chip.hints": "詰まった原因を教える",
+      "chip.keys": "シェイプキー",
+      "chip.lineup": "Line Up LODs",
+      "chip.local": "100% ローカル",
+      "chip.perlevel": "段階ごとの Details",
+      "chip.presets": "保存できるプリセット",
+      "chip.preview": "距離プレビュー",
+      "chip.proedit": "編集とプリセットは PRO",
+      "chip.proonly": "PRO のみ",
+      "chip.queue": "バッチキュー",
+      "chip.rigged": "リグ付きで返る",
+      "chip.shading": "シェーディングを維持",
+      "chip.single": "単一段階の再生成",
+      "chip.sloppy": "Sloppy",
+      "chip.uv": "UV を保護",
+      "chip.vcol": "正確な頂点カラー",
+      "chip.vgroups": "頂点グループ",
+      "chip.voxel": "Voxel Remesh",
+      "cmp.eyebrow": "PRO と Light",
+      "cmp.head": "PRO と Light は何が違う？",
+      "cmp.lede": "Light はそれ自体で完結したアドオンです。PRO はさらに制御と機能を加えます。",
+      "cmp.lg.full": "あり",
+      "cmp.lg.none": "PRO のみ",
+      "cmp.lg.part": "Light では制限あり",
+      "cta.docs": "ユーザーマニュアル",
+      "cta.get": "SimplyFive PRO を購入 <span class=\"tag\">→</span>",
+      "cta.light": "SimplyFive Light を試す",
+      "det.body": "組み込みモードでたいていの場合は足ります。段階のモード自体が、アルゴリズム設定の上に載ったプリセットだからです。足りないとき — モデルが崩れる、テクスチャがずれる、ポリゴンが多く残る — は、その段階のモードの下にある <b>Details</b> を開いて手で設定します。<b>Target Error</b>、<b>Lock Border</b>、<b>Protect UV Seams</b>、法線と UV のウェイト、prune パスなど。これらで LOD を思いどおりの形に追い込めます。段階が目標に届かなかった場合、パネルが「いくつ要求していくつになったか」「何が潰れなかったか（マテリアル名つき）」「どの設定を動かせばよいか」を教えます。うまくいった組み合わせはグローバルプリセットとして保存し、次のモデルにワンクリックで適用できます。段階モード自体も、アドオン設定で自分好みに作り替えられます。各パラメーターの詳細は<a href=\"docs.html?edition=pro#details\">マニュアル</a>にあります。",
+      "det.eyebrow": "ブラックボックスなし",
+      "det.head": "どの段階も開き、どのパラメーターも自分のもの。",
+      "f1.h": "1 オブジェクトにつき最大 5 LOD",
+      "f1.k": "段階",
+      "f1.p": "各段階が独自の目標三角形率と、簡略化パラメーター一式を持ちます。",
+      "f10.h": "設定一式を保存",
+      "f10.k": "プリセット",
+      "f10.p": "設定一式に名前を付けた Blender プリセットとして保存・読み込み。このリスト以外にも機能があります。",
+      "f2.h": "5 段階の強さプリセット",
+      "f2.k": "プリセット",
+      "f2.p": "<b>Careful</b> から <b>Clear Simplify</b> まで。自分で追い込みたいときのための Custom モードもあります。",
+      "f3.h": "属性を考慮",
+      "f3.k": "属性",
+      "f3.p": "調整可能なウェイトで UV と法線を保持。連鎖生成の「Build from Previous LOD」モードも含みます。",
+      "f4.h": "複数 UV チャンネル",
+      "f4.k": "UV",
+      "f4.p": "すべての UV チャンネルを LOD へ運ぶか、アクティブなものだけか。元の名前は常に保たれます。",
+      "f5.h": "頂点カラー",
+      "f5.k": "カラー",
+      "f5.p": "各カラーレイヤーを頂点単位で転送。重要度マップとしても使えます（ソフトウェイトおよび／またはハードロック）。",
+      "f6.h": "法線は思いどおりに",
+      "f6.k": "法線",
+      "f6.p": "元メッシュの法線を保つか、Shade Smooth by Angle で LOD 自身のジオメトリから再計算するか。",
+      "f7.h": "マルチマテリアル対応",
+      "f7.k": "マテリアル",
+      "f7.p": "リンク複製やインスタンスのマテリアル、Geometry Nodes が出力したものにも対応します。",
+      "f8.h": "変更可能なサフィックス",
+      "f8.k": "命名",
+      "f8.p": "LOD 名のサフィックスは Preferences で設定します。既定値は <span style=\"font-family:var(--mono)\">_lod_</span> です。",
+      "f9.h": "Preview と Line Up",
+      "f9.k": "確認",
+      "f9.p": "ビューポート内の LOD プレビューに加え、全段階をローカルビューで一列に並べる確認モード。",
+      "feat.eyebrow": "SimplyFive にできること",
+      "feat.head": "LOD を失敗作ではなくメッシュとして扱う 10 の機能。",
+      "foot.contact": "販売者への連絡先:",
+      "foot.small": "Blender 4.2 以降に対応 · <a href=\"https://github.com/zeux/meshoptimizer\" target=\"_blank\" rel=\"noopener\">meshoptimizer</a>（Arseny Kapoulkine 作、MIT ライセンス）を使用 · © 2026 SimplyFive",
+      "hero.eyebrow": "Blender アドオン · meshoptimizer",
+      "hero.h1": "Blender のための SimplyFive <span class=\"accent\">LOD&nbsp;Generator</span>",
+      "hero.sub": "アクティブオブジェクトから LOD（Level of Detail）メッシュ一式を生成する Blender アドオンです。内部では <b>meshoptimizer</b> ライブラリを使用します。1 つのメッシュにつき <b>最大 5 段階</b>の簡略化バージョンを作成でき、段階ごとに強さを個別指定できます。簡略化では <b>UV 展開</b>（複数 UV チャンネルを含む）、<b>法線</b>、<b>頂点カラー</b>（転送され、重要度マップとしても使えます）、<b>マテリアル</b>が考慮されます。",
+      "lod.label": "Line Up LODs — 1 つのシルエット、5 段階の LOD",
+      "nav.buy": "購入",
+      "nav.docs": "ユーザーマニュアル",
+      "nav.email": "メール",
+      "nav.features": "PRO と Light",
+      "nav.news": "お知らせ",
+      "rem.body": "アドオンには、シルエットを保ちながらメッシュを作り直す 3 つのアルゴリズムがあります。<b>Sloppy</b> は荒い方式で、トポロジーを無視して可能な限り削ります。<b>Voxel Remesh</b> はエッジを潰す代わりにボクセルグリッド上で表面を再構築します。穴は塞がり、細長い三角形は消え、結果は水密になり、ボクセルより小さいものは融合します。残るのは位置情報だけです。そして UV と法線のウェイトを切った素の <b>meshoptimizer</b> パス。同じエッジ収縮ですが、テクスチャやシェーディングを気にしません。",
+      "rem.eyebrow": "トポロジーそのものが邪魔なとき",
+      "rem.head": "リメッシュ。",
+      "scan.body": "フォトグラメトリが渡してくるのは、数百万の三角形、ノイズだらけの法線、そして形状ではなくテクスチャと頂点カラーに宿ったディテールです。<b>Scan</b> プリセットはまさにそのために作られています。形状、UV 展開、頂点カラーを最優先し、その代償として法線の精度を払い、簡略化を始める前に積極的な pre-prune パスがスキャンのゴミを取り除きます。<b>Accurate Vertex Colors</b> は生き残った頂点の色をそのまま使うのではなく、収縮ごとに色を混ぜるので、塗ったグラデーションが段差になりません。スキャンでは、Decimate が残すどんな結果よりもはるかにきれいに仕上がります。",
+      "scan.eyebrow": "フォトグラメトリ",
+      "scan.head": "スキャンは形状・UV・頂点カラーを保ちます。",
+      "shot.label": "Blender 上の SimplyFive",
+      "skin.body": "キャラクターの LOD はバインドが外れて返ってきたら使い物になりません。<b>Transfer Vertex Groups</b> は元メッシュの頂点グループを各段階へコピーします。LOD の頂点は生き残った元の頂点なので、その頂点のウェイトをそのまま受け継ぎます。ブレンドは一切行われず、どのウェイトも元メッシュに実在した値です。メッシュがアーマチュアにバインドされていれば、バインド自体もコピーされます。<b>シェイプキー</b>も、近い段階だけ、あるいは全段階へ、名前と順序を保ったまま転送できます。",
+      "skin.eyebrow": "スキニング済みジオメトリ",
+      "skin.head": "LOD はスケルトンにバインドされたまま返ります。",
+      "ui.body": "距離スライダーがその場で段階を切り替え、<b>Only This LOD</b> が 1 つだけを表示し、<b>Line Up LODs</b> が一族すべてを一列に並べます（ローカルビュー、各行はその子階層ぶんの間隔）。推測ではなく並べて見比べられます。段階 3 だけ気に入らない？ その設定を変えて <b>Generate This LOD</b> を押せば、その段階だけが作り直され、他はそのまま残ります。",
+      "ui.eyebrow": "ワークフロー",
+      "ui.head": "ビューポートで見極め、1 段階ずつ作り直す。",
+      "upd.big": "SimplyFive PRO を購入すれば、今後のアップデートは無料です。製品に含まれています。",
+      "upd.eyebrow": "無料アップデートとサポート",
+      "upd.p": "そして放っておかれることはありません。<a href=\"https://t.me/zloy_pingvin\" target=\"_blank\" rel=\"noopener\">Telegram</a> か <a href=\"mailto:zloy.tux@gmail.com\">メール</a>で何でもご連絡ください。不具合、簡略化できないメッシュ、設定の質問、ほしい機能。私が直接お答えしますし、届いた要望から次のバージョンが作られます。",
+      "ver.btn": "変更点を見る →",
+      "ver.label": "現在のバージョン",
+      "video.embed": "<iframe src=\"https://www.youtube-nocookie.com/embed/zWpD3uTObaE\" title=\"SimplyFive — overview\" loading=\"lazy\" allow=\"accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe>",
+      "video.label": "動画 — Light と Pro の紹介",
+      "why.body": "Blender の LOD アドオンの多くは <b>Decimate モディファイア</b>に頼っています。SimplyFive はそれに触れません<sup class=\"fn\"><a href=\"#whyFoot\">*</a></sup>。代わりに <b>meshoptimizer</b> のアルゴリズムを使い、ポリゴンを減らしながら <b>法線</b>と <b>UV 展開</b>をはるかによく保ちます。品質は既知の商用ツールに匹敵し、<b>高速</b>で、すべてが<b>ローカル</b>で完結します。インターネット接続も、類似製品にありがちな怪しいライセンスも不要です。",
+      "why.eyebrow": "何が違うのか",
+      "why.foot": "<b>*</b> ほぼ使いません。<b>1.2.7</b> 以降、任意の <b>「Very Aggressive Alternative」</b>モード（<b>Finish with Decimate</b>）だけが、UV や法線のシームで meshoptimizer が止まったときに目標三角形数に正確に到達するため、最後に短い Decimate パスを実行します。他のモードはすべて純粋な meshoptimizer のままです。<a href=\"changelog.html#v1-2-7\">変更履歴を見る →</a>",
+      "why.head": "Decimate モディファイアのアルゴリズムは使いません。"
+    },
+    zh: {
+      "_title": "SimplyFive — Blender 的 LOD 生成器",
+      "batch.body": "每个被选中的网格都会变成一个任务，带着屏幕上那套设置的副本，并且每个任务都能单独调整。当零件已经在队列里时，也可以把设置一次性应用到一整组零件上。队列有自己的预览，和单个网格用的是同一个。行的颜色说明任务状态：<b>灰色</b> —— 尚未执行，<b>绿色</b> —— 已完成，<b>红色</b> —— 已完成，但有值得一看的警告。",
+      "batch.eyebrow": "整个场景一次搞定",
+      "batch.head": "设置一次，把整个场景排进队列。",
+      "buy.boosty.btn": "在 Boosty 购买",
+      "buy.boosty.now": "$6",
+      "buy.boosty.old": "$14",
+      "buy.boosty.p": "银行卡付款 —— 支持俄罗斯、独联体及国际卡。即时获取。Boosty 订阅者另有折扣。",
+      "buy.boosty.region": "俄罗斯 / 独联体 + 国际",
+      "buy.eyebrow": "获取 SimplyFive PRO",
+      "buy.gumroad.btn": "即将上线",
+      "buy.gumroad.p": "全球范围的银行卡或 PayPal 结账。即时下载。",
+      "buy.gumroad.region": "国际",
+      "buy.head": "四种付款方式，无论你在哪里。",
+      "buy.hive.btn": "即将上线",
+      "buy.hive.p": "Blender 的市场平台，前身为 Blender Market。银行卡或 PayPal。",
+      "buy.hive.region": "国际",
+      "buy.lede": "挑一个适合你所在地区的收款方式 —— 它们交付的都是同一个 SimplyFive PRO，同样附带免费更新。更想用免费版？SimplyFive Light 可在 <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> 免费下载。",
+      "buy.sale": "优惠",
+      "buy.stars.btn": "用 Telegram Stars 付款",
+      "buy.stars.p": "在任何地方用 Telegram Stars 付款 —— 就在 Telegram 内完成，不需要银行卡或加密钱包。",
+      "buy.stars.region": "国际",
+      "chip.clearui": "清晰的界面",
+      "chip.debris": "清掉扫描碎屑",
+      "chip.fast": "快",
+      "chip.hints": "会告诉你卡在哪",
+      "chip.keys": "形态键",
+      "chip.lineup": "Line Up LODs",
+      "chip.local": "100% 本地",
+      "chip.perlevel": "逐级 Details",
+      "chip.presets": "可保存的预设",
+      "chip.preview": "按距离预览",
+      "chip.proedit": "编辑与预设：PRO",
+      "chip.proonly": "仅 PRO",
+      "chip.queue": "批处理队列",
+      "chip.rigged": "带绑定返回",
+      "chip.shading": "保住着色",
+      "chip.single": "重建单个层级",
+      "chip.sloppy": "Sloppy",
+      "chip.uv": "保护 UV",
+      "chip.vcol": "精确的顶点色",
+      "chip.vgroups": "顶点组",
+      "chip.voxel": "Voxel Remesh",
+      "cmp.eyebrow": "PRO 与 Light",
+      "cmp.head": "PRO 和 Light 有什么区别？",
+      "cmp.lede": "Light 是一个完整可用的插件；PRO 在此之上提供更多控制与功能。",
+      "cmp.lg.full": "包含",
+      "cmp.lg.none": "仅 PRO",
+      "cmp.lg.part": "Light 中受限",
+      "cta.docs": "用户手册",
+      "cta.get": "购买 SimplyFive PRO <span class=\"tag\">→</span>",
+      "cta.light": "试用 SimplyFive Light",
+      "det.body": "内置模式能覆盖大多数情况 —— 层级的模式本身就是算法设置之上的一个预设。当它们不够用时 —— 模型「散架」、贴图漂移、或者剩下的面还是太多 —— 展开该层级模式下方的 <b>Details</b>，手动设置参数：<b>Target Error</b>、<b>Lock Border</b>、<b>Protect UV Seams</b>、法线与 UV 权重、prune 通道。靠这些就能把一级 LOD 调成你想要的样子。当某一级没有达到目标时，面板会告诉你要了多少三角面、实际出来多少、什么没能塌陷（附材质名），以及该动哪个设置。调通的组合可以存成全局预设，一键套用到下一个模型上；层级模式本身也能在插件设置里改成你自己的默认值。每个参数的详细说明见<a href=\"docs.html?edition=pro#details\">手册</a>。",
+      "det.eyebrow": "没有黑箱",
+      "det.head": "每一级都能展开，每个参数都归你。",
+      "f1.h": "每个物体最多 5 级 LOD",
+      "f1.k": "层级",
+      "f1.p": "每一级都有自己的目标三角面百分比，以及整套简化参数。",
+      "f10.h": "保存完整配置",
+      "f10.k": "预设",
+      "f10.p": "把完整配置存成有名字的 Blender 预设并随时载入 —— 功能还不止这份清单。",
+      "f2.h": "5 档强度预设",
+      "f2.k": "预设",
+      "f2.p": "从 <b>Careful</b> 到 <b>Clear Simplify</b>，另有 Custom 模式供你自己微调。",
+      "f3.h": "顾及属性",
+      "f3.k": "属性",
+      "f3.p": "以可调权重保留 UV 与法线，并包含链式的「Build from Previous LOD」模式。",
+      "f4.h": "多 UV 通道",
+      "f4.k": "UV",
+      "f4.p": "把所有 UV 通道带到 LOD 上，或只带活动通道 —— 原始名称始终保留。",
+      "f5.h": "顶点色",
+      "f5.k": "颜色",
+      "f5.p": "每一层颜色都按顶点传递，还能兼作重要度贴图：软权重和／或硬锁定。",
+      "f6.h": "法线随你安排",
+      "f6.k": "法线",
+      "f6.p": "保留源网格的法线，或用 Shade Smooth by Angle 依据 LOD 自身的几何重新计算。",
+      "f7.h": "多材质支持",
+      "f7.k": "材质",
+      "f7.p": "能处理链接复制体与实例上的材质，也包括 Geometry Nodes 生成的材质。",
+      "f8.h": "可配置后缀",
+      "f8.k": "命名",
+      "f8.p": "在 Preferences 里设置 LOD 名称后缀 —— 默认是 <span style=\"font-family:var(--mono)\">_lod_</span>。",
+      "f9.h": "Preview 与 Line Up",
+      "f9.k": "检查",
+      "f9.p": "视图内的 LOD 预览，外加一个检查模式：把所有层级在局部视图中排成一行。",
+      "feat.eyebrow": "SimplyFive 能做什么",
+      "feat.head": "十项功能，把 LOD 当作网格而不是残次品。",
+      "foot.contact": "联系作者：",
+      "foot.small": "支持 Blender 4.2+ · 基于 <a href=\"https://github.com/zeux/meshoptimizer\" target=\"_blank\" rel=\"noopener\">meshoptimizer</a>（作者 Arseny Kapoulkine，MIT 许可）· © 2026 SimplyFive",
+      "hero.eyebrow": "Blender 插件 · meshoptimizer",
+      "hero.h1": "SimplyFive <span class=\"accent\">LOD&nbsp;Generator</span> for Blender",
+      "hero.sub": "一个 Blender 插件，从活动物体生成一整套 LOD（细节层级）网格，底层使用 <b>meshoptimizer</b> 库。每个网格最多可生成 <b>5 级</b>简化版本，每一级的简化强度都可单独设置；简化过程会顾及 <b>UV 展开</b>（包括多个 UV 通道）、<b>法线</b>、<b>顶点色</b>（会被传递，也可当作重要度贴图使用）以及<b>材质</b>。",
+      "lod.label": "Line Up LODs — 一个剪影，五级 LOD",
+      "nav.buy": "购买",
+      "nav.docs": "用户手册",
+      "nav.email": "邮件",
+      "nav.features": "PRO 与 Light",
+      "nav.news": "动态",
+      "rem.body": "插件里有三种算法，能在保住剪影的前提下把网格重新构建一遍。<b>Sloppy</b> 是最粗暴的一种：无视拓扑，能砍多少砍多少。<b>Voxel Remesh</b> 不做边塌陷，而是在体素网格上重建表面：洞会被补上，细长的碎三角消失，结果是水密的，比一个体素更小的特征会被合并 —— 只有位置信息留下来。还有关掉 UV 与法线权重的原生 <b>meshoptimizer</b> 通道：同样是边塌陷，但完全不顾贴图和着色。",
+      "rem.eyebrow": "当拓扑本身就是问题",
+      "rem.head": "重建网格（Remesh）。",
+      "scan.body": "摄影测量交给你的是数百万个三角面、嘈杂的法线，以及活在贴图和顶点色里而不是形状里的细节。<b>Scan</b> 预设正是为此而生：形状、UV 展开和顶点色优先，代价是法线精度；在简化开始之前，还有一道激进的 pre-prune 清掉扫描产生的碎屑。<b>Accurate Vertex Colors</b> 会沿着每次塌陷混合颜色，而不是直接沿用幸存顶点的颜色，画好的渐变不会再出现台阶。在扫描模型上，结果比 Decimate 留下的任何东西都干净得多。",
+      "scan.eyebrow": "摄影测量",
+      "scan.head": "扫描模型保住形状、UV 和顶点色。",
+      "shot.label": "Blender 中的 SimplyFive",
+      "skin.body": "角色的 LOD 如果丢了绑定就毫无用处。<b>Transfer Vertex Groups</b> 把源模型的顶点组复制到每一级：LOD 的顶点就是幸存下来的源顶点，因此它完整继承该顶点的权重。没有任何混合，每一个权重都是源模型真实存在过的值。如果网格绑定到骨架，绑定本身也会一并复制。<b>形态键</b>同样可以传递，传到近处几级或者全部层级，名称与顺序都保持不变。",
+      "skin.eyebrow": "带蒙皮的几何体",
+      "skin.head": "LOD 回来时仍然绑在骨架上。",
+      "ui.body": "距离滑块在原地逐级切换，<b>Only This LOD</b> 单独显示某一级，<b>Line Up LODs</b> 把整组层级排成一行（局部视图，每行按自身子层级留出间距），让你并排比较而不是靠猜。只有第 3 级不满意？改它的设置并按 <b>Generate This LOD</b>：只有这一级会重建，其余保持原样。",
+      "ui.eyebrow": "工作流",
+      "ui.head": "在视图里判断，一次只重建一级。",
+      "upd.big": "购买 SimplyFive PRO 后，后续更新全部免费 —— 它们本来就属于这个产品。",
+      "upd.eyebrow": "免费更新与技术支持",
+      "upd.p": "而且你不会被丢在一边：任何问题都可以通过 <a href=\"https://t.me/zloy_pingvin\" target=\"_blank\" rel=\"noopener\">Telegram</a> 或 <a href=\"mailto:zloy.tux@gmail.com\">邮件</a> 找我 —— 无论是 bug、某个怎么都简化不下去的网格、参数上的疑问，还是你需要的新功能。我亲自回复，下一个版本正是从这些反馈里长出来的。",
+      "ver.btn": "查看更新 →",
+      "ver.label": "当前版本",
+      "video.embed": "<iframe src=\"https://www.youtube-nocookie.com/embed/zWpD3uTObaE\" title=\"SimplyFive — overview\" loading=\"lazy\" allow=\"accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe>",
+      "video.label": "视频 — Light 与 Pro 简介",
+      "why.body": "大多数 Blender 的 LOD 插件都依赖 <b>Decimate 修改器</b>。SimplyFive 不碰它<sup class=\"fn\"><a href=\"#whyFoot\">*</a></sup>，而是依靠 <b>meshoptimizer</b> 的算法：在减面的同时，对<b>法线</b>和 <b>UV 展开</b>的保护要好得多。质量可与知名商业工具相当，<b>速度快</b>，并且全部在<b>本地</b>运行：不需要联网，也没有同类产品常见的可疑授权。",
+      "why.eyebrow": "区别在哪里",
+      "why.foot": "<b>*</b> 几乎从不 —— 自 <b>1.2.7</b> 起，可选的<b>「Very Aggressive Alternative」</b>模式（<b>Finish with Decimate</b>）只在最后追加一次短暂的 Decimate，用于在 meshoptimizer 卡在 UV／法线接缝上时精确命中目标三角面百分比。其余模式仍是纯 meshoptimizer。<a href=\"changelog.html#v1-2-7\">查看更新日志 →</a>",
+      "why.head": "它从不使用 Decimate 修改器的算法。"
     }
   };
 
   /* ---------------- PRO / Light comparison data ---------------- */
   /* Edit rows here. state: "full" ✓ · "part" ◐ · "none" —. cap = short note under the mark. */
   var COMPARE = [
-    { name: { en: "meshoptimizer simplification core", ru: "Ядро упрощения meshoptimizer" }, pro: "full", light: "full" },
-    { name: { en: "5 LOD levels", ru: "5 уровней LOD" }, pro: "full", light: "full" },
-    { name: { en: "Multi-material mesh", ru: "Мультиматериал меш" }, pro: "full", light: "full" },
-    { name: { en: "Configurable LOD name suffix", ru: "Настраиваемый суффикс имени LOD" }, pro: "full", light: "full" },
-    { name: { en: "UI preview features", ru: "UI preview фичи" }, pro: "full", light: "full" },
-    { name: { en: "Quality modes", ru: "Режимы качества" }, pro: "full", light: "full" },
-    { name: { en: "Multiple UV Channels (carry all UVs)", ru: "Multiple UV Channels (перенос всех UV)" }, pro: "full", light: "full" },
-    { name: { en: "Vertex-color importance (simplify by vertex mask)", ru: "Vertex Color importance (упрощение по вертекс маске)" }, pro: "full", light: "full" },
-    { name: { en: "Per-LOD fine-tuning (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, Normal/UV weights, Vertex Update, Pre-prune)", ru: "Тонкая настройка каждого LOD (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, веса Normal/UV, Vertex Update, Pre-prune)" }, pro: "full", light: "none" },
-    { name: { en: "Vertex-color hard-lock (advanced simplify control by vertex mask)", ru: "Vertex Color hard-lock (расширенный контроль упрощения по вертекс маске)" }, pro: "full", light: "none" },
-    { name: { en: "Chained LODs (Build from Previous LOD)", ru: "Цепочки LOD (Build from Previous LOD)" }, pro: "full", light: "none" },
-    { name: { en: "Editable mode presets in Preferences", ru: "Редактируемые пресеты режимов в Preferences" }, pro: "full", light: "none" },
-    { name: { en: "Normals: Recalculate + Auto Smooth by angle", ru: "Нормали: Recalculate + Auto Smooth по углу" }, pro: "full", light: "none" },
-    { name: { en: "Normals: Recalculate + Sharp Loops (rebuilds broken feature loops, Flatten Panels)", ru: "Нормали: Recalculate + Sharp Loops (достраивает разорванные лупы, Flatten Panels)" }, pro: "full", light: "none" },
-    { name: { en: "Voxel Remesh (experimental) — watertight rebuild, Solid / Sheets / Shell", ru: "Voxel Remesh (эксперим.) — водонепроницаемая пересборка, Solid / Sheets / Shell" }, pro: "full", light: "none" },
-    { name: { en: "Sloppy (topology-ignoring)", ru: "Sloppy (игнор топологии)" }, pro: "full", light: "none" },
-    { name: { en: "Regularize / Regularize Light", ru: "Regularize / Regularize Light" }, pro: "full", light: "none" },
-    { name: { en: "Save / Load full config as presets", ru: "Save / Load полной конфигурации как пресетов" }, pro: "full", light: "none" }
+    { name: { en: "meshoptimizer simplification core", ru: "Ядро упрощения meshoptimizer" , de: "meshoptimizer-Kern zur Vereinfachung", es: "Núcleo de simplificación meshoptimizer", ja: "meshoptimizer による簡略化コア", zh: "meshoptimizer 简化内核"}, pro: "full", light: "full" },
+    { name: { en: "5 LOD levels", ru: "5 уровней LOD" , de: "5 LOD-Stufen", es: "5 niveles de LOD", ja: "5 段階の LOD", zh: "5 级 LOD"}, pro: "full", light: "full" },
+    { name: { en: "Multi-material mesh", ru: "Мультиматериал меш" , de: "Mesh mit mehreren Materialien", es: "Malla multimaterial", ja: "マルチマテリアルのメッシュ", zh: "多材质网格"}, pro: "full", light: "full" },
+    { name: { en: "Configurable LOD name suffix", ru: "Настраиваемый суффикс имени LOD" , de: "Frei wählbarer LOD-Namenssuffix", es: "Sufijo de nombre de LOD configurable", ja: "LOD 名サフィックスの変更", zh: "可配置的 LOD 名称后缀"}, pro: "full", light: "full" },
+    { name: { en: "UI preview features", ru: "UI preview фичи" , de: "Vorschau-Funktionen im UI", es: "Funciones de previsualización en la interfaz", ja: "UI のプレビュー機能", zh: "界面预览功能"}, pro: "full", light: "full" },
+    { name: { en: "Quality modes", ru: "Режимы качества" , de: "Qualitätsmodi", es: "Modos de calidad", ja: "品質モード", zh: "质量模式"}, pro: "full", light: "full" },
+    { name: { en: "Multiple UV Channels (carry all UVs)", ru: "Multiple UV Channels (перенос всех UV)" , de: "Multiple UV Channels (alle UVs übertragen)", es: "Multiple UV Channels (lleva todas las UV)", ja: "Multiple UV Channels（全 UV を転送）", zh: "Multiple UV Channels（传递全部 UV）"}, pro: "full", light: "full" },
+    { name: { en: "Vertex-color importance (simplify by vertex mask)", ru: "Vertex Color importance (упрощение по вертекс маске)" , de: "Vertex-Color-Wichtigkeit (Vereinfachen nach Vertex-Maske)", es: "Importancia por color de vértice (simplificar según máscara)", ja: "頂点カラーによる重要度（頂点マスクで簡略化）", zh: "顶点色重要度（按顶点遮罩简化）"}, pro: "full", light: "full" },
+    { name: { en: "Keep the original object untouched", ru: "Сохранять оригинал нетронутым" , de: "Originalobjekt unangetastet lassen", es: "Dejar intacto el objeto original", ja: "元のオブジェクトをそのまま残す", zh: "保持原始物体不变"}, pro: "full", light: "full" },
+    { name: { en: "Result report: why a level missed and what it lost", ru: "Отчёт о результате: почему уровень промахнулся и что потерял" , de: "Ergebnisbericht: warum eine Stufe verfehlt hat und was verloren ging", es: "Informe de resultado: por qué un nivel falló y qué perdió", ja: "結果レポート：目標を外した理由と失われたもの", zh: "结果报告：某一级为何没达标、丢了什么"}, pro: "full", light: "full" },
+    { name: { en: "Per-LOD fine-tuning (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, Normal/UV weights, Vertex Update, Pre-prune)", ru: "Тонкая настройка каждого LOD (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, веса Normal/UV, Vertex Update, Pre-prune)" , de: "Feinabstimmung je LOD (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, Normalen-/UV-Gewichte, Vertex Update, Pre-prune)", es: "Ajuste fino por LOD (Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, pesos de normales/UV, Vertex Update, Pre-prune)", ja: "LOD ごとの微調整（Target Error, Lock Border, Sparse, Prune, Permissive, Protect UV Seams, 法線/UV ウェイト, Vertex Update, Pre-prune）", zh: "逐级微调（Target Error、Lock Border、Sparse、Prune、Permissive、Protect UV Seams、法线/UV 权重、Vertex Update、Pre-prune）"}, pro: "full", light: "none" },
+    { name: { en: "Vertex-color hard-lock (advanced simplify control by vertex mask)", ru: "Vertex Color hard-lock (расширенный контроль упрощения по вертекс маске)" , de: "Vertex-Color-Hard-Lock (erweiterte Steuerung über Vertex-Maske)", es: "Bloqueo duro por color de vértice (control avanzado con máscara)", ja: "頂点カラーのハードロック（頂点マスクによる高度な制御）", zh: "顶点色硬锁定（按顶点遮罩的高级控制）"}, pro: "full", light: "none" },
+    { name: { en: "Chained LODs (Build from Previous LOD)", ru: "Цепочки LOD (Build from Previous LOD)" , de: "Verkettete LODs (Build from Previous LOD)", es: "LODs encadenados (Build from Previous LOD)", ja: "連鎖 LOD（Build from Previous LOD）", zh: "链式 LOD（Build from Previous LOD）"}, pro: "full", light: "none" },
+    { name: { en: "Editable mode presets in Preferences", ru: "Редактируемые пресеты режимов в Preferences" , de: "Bearbeitbare Modus-Presets in den Preferences", es: "Presets de modo editables en Preferences", ja: "Preferences で編集できるモードプリセット", zh: "Preferences 中可编辑的模式预设"}, pro: "full", light: "none" },
+    { name: { en: "Normals: Recalculate + Auto Smooth, Recalculate + Sharp Loops", ru: "Нормали: Recalculate + Auto Smooth, Recalculate + Sharp Loops" , de: "Normalen: Recalculate + Auto Smooth, Recalculate + Sharp Loops", es: "Normales: Recalculate + Auto Smooth, Recalculate + Sharp Loops", ja: "法線：Recalculate + Auto Smooth、Recalculate + Sharp Loops", zh: "法线：Recalculate + Auto Smooth、Recalculate + Sharp Loops"}, pro: "full", light: "none" },
+    { name: { en: "Voxel Remesh (experimental)", ru: "Voxel Remesh (эксперим.)" , de: "Voxel Remesh (experimentell)", es: "Voxel Remesh (experimental)", ja: "Voxel Remesh（実験的）", zh: "Voxel Remesh（实验性）"}, pro: "full", light: "none" },
+    { name: { en: "Regularize / Regularize Light", ru: "Regularize / Regularize Light" , de: "Regularize / Regularize Light", es: "Regularize / Regularize Light", ja: "Regularize / Regularize Light", zh: "Regularize / Regularize Light"}, pro: "full", light: "none" },
+    { name: { en: "Save / Load full config as presets", ru: "Save / Load полной конфигурации как пресетов" , de: "Ganze Konfiguration als Preset speichern / laden", es: "Guardar / cargar la configuración completa como presets", ja: "設定一式をプリセットとして保存・読み込み", zh: "将完整配置保存／载入为预设"}, pro: "full", light: "none" },
+    { name: { en: "Batch queue", ru: "Пакетная очередь" , de: "Stapelverarbeitung", es: "Cola por lotes", ja: "バッチキュー", zh: "批处理队列"}, pro: "full", light: "none" },
+    { name: { en: "Skinned mesh support", ru: "Поддержка мешей со скиннингом" , de: "Unterstützung für Meshes mit Skinning", es: "Soporte de mallas con skinning", ja: "スキニング済みメッシュへの対応", zh: "支持带蒙皮的网格"}, pro: "full", light: "none" },
+    { name: { en: "Extra presets: Clear Simplify, Scan", ru: "Доп. режимы: Clear Simplify, Scan" , de: "Zusätzliche Presets: Clear Simplify, Scan", es: "Presets adicionales: Clear Simplify, Scan", ja: "追加プリセット：Clear Simplify、Scan", zh: "额外预设：Clear Simplify、Scan"}, pro: "full", light: "none" }
   ];
   function cmpCell(state, cap, L) {
     var ic = state === "full" ? "✓" : state === "part" ? "◐" : "—";
     var s = '<div class="mark ' + state + '"><span class="ic">' + ic + '</span>';
-    if (cap) s += '<span class="cap">' + cap[L] + '</span>';
+    if (cap) s += '<span class="cap">' + (cap[L] || cap.en) + '</span>';
     return s + '</div>';
   }
   function renderCompare(lang) {
     var t = document.getElementById('cmpTable'); if (!t) return;
-    var L = lang === 'ru' ? 'ru' : 'en';
+    var L = lang;
     var html = '<div class="cmp-head"><div class="feat"></div><div class="col pro">PRO</div><div class="col light">Light</div></div>';
     COMPARE.forEach(function (r) {
-      html += '<div class="cmp-row"><div class="feat"><span class="name">' + r.name[L] + '</span>'
-        + (r.sub ? '<span class="sub">' + r.sub[L] + '</span>' : '') + '</div>'
+      html += '<div class="cmp-row"><div class="feat"><span class="name">' + (r.name[L] || r.name.en) + '</span>'
+        + (r.sub ? '<span class="sub">' + (r.sub[L] || r.sub.en) + '</span>' : '') + '</div>'
         + cmpCell(r.pro, r.proCap, L) + cmpCell(r.light, r.lightCap, L) + '</div>';
     });
     t.innerHTML = html;
@@ -598,16 +1417,16 @@
       var v = dict[el.getAttribute('data-i18n-html')]; if (v != null) el.innerHTML = v;
     });
     renderCompare(lang);
-    document.getElementById('langEn').classList.toggle('on', lang === 'en');
-    document.getElementById('langRu').classList.toggle('on', lang === 'ru');
+    var sel = document.getElementById('langSel'); if (sel) sel.value = lang;
     try { localStorage.setItem('sf_lang', lang); } catch (e) {}
   }
 
   var saved; try { saved = localStorage.getItem('sf_lang'); } catch (e) {}
-  var initial = saved || ((navigator.language || 'en').slice(0, 2) === 'ru' ? 'ru' : 'en');
+  var guess = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  var initial = (saved && I18N[saved]) ? saved : (I18N[guess] ? guess : 'en');
   applyLang(initial);
-  document.getElementById('langEn').addEventListener('click', function () { applyLang('en'); });
-  document.getElementById('langRu').addEventListener('click', function () { applyLang('ru'); });
+  var langSel = document.getElementById('langSel');
+  if (langSel) langSel.addEventListener('change', function () { applyLang(this.value); });
 
   /* ---------------- theme ---------------- */
   var root = document.documentElement;
@@ -729,6 +1548,47 @@
   if (!used) {
     fetch('media/hero-lods.json').then(function (r) { return r.ok ? r.json() : null; })
       .then(useLods).catch(function () { /* keep the placeholder spheres */ });
+  }
+})();
+</script>
+
+<!-- placeholder frames: runs after every .shot-stage in the page exists -->
+<script>
+(function () {
+  var EXTS = ['png', 'webp', 'avif', 'jpg', 'jpeg', 'gif'];
+  Array.prototype.forEach.call(document.querySelectorAll('.shot-stage'), function (stage) {
+    var img = stage.querySelector('.shot-img'), hint = stage.querySelector('.shot-hint');
+    if (!img) return;
+    var base = img.getAttribute('data-base'), i = 0;
+    function next() {
+      if (i >= EXTS.length) {
+        stage.classList.add('missing'); img.remove();
+        if (hint) hint.textContent = base.replace(/^media\//, '') + '.*  — drop a screenshot here';
+        return;
+      }
+      img.src = base + '.' + EXTS[i++];
+    }
+    img.addEventListener('error', next); next();
+  });
+})();
+</script>
+
+<script>
+(function () {
+  var bar = document.getElementById('stickyBar');
+  var hero = document.querySelector('header.hero .cta-row');
+  if (!bar || !hero) return;
+  function show(on) { bar.classList.toggle('on', on); }
+  if ('IntersectionObserver' in window) {
+    // shown only while the hero buttons are above the viewport, never over the hero itself
+    new IntersectionObserver(function (entries) {
+      var e = entries[0];
+      show(!e.isIntersecting && e.boundingClientRect.top < 0);
+    }, { threshold: 0 }).observe(hero);
+  } else {
+    window.addEventListener('scroll', function () {
+      show(hero.getBoundingClientRect().bottom < 0);
+    }, { passive: true });
   }
 })();
 </script>

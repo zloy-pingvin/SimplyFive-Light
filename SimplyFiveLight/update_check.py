@@ -95,7 +95,11 @@ def _worker(url, callback, page_url):
                 print(f"[LOD Generator] update check callback failed: {exc}")
         return None
 
-    bpy.app.timers.register(deliver, first_interval=0.0)
+    # persistent: this is the only place _running is cleared, and a file
+    # load between the request and the answer used to drop the timer - after
+    # which the button answered "already checking" for the rest of the
+    # session and the automatic check never ran again.
+    bpy.app.timers.register(deliver, first_interval=0.0, persistent=True)
 
 
 def start(url, callback, page_url=PAGE_URL):
