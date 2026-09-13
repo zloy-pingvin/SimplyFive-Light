@@ -93,8 +93,10 @@
      into media/ under the name the caption shows (any of the extensions
      below). Same mechanism as the manual. */
   figure.ph{margin:.7em 0 .2em;}
-  figure.ph img{display:block;width:100%;border:1px solid var(--line);
-    border-radius:var(--radius);}
+  /* never upscale: width:100% blew a 764px-wide portrait gif up to the
+     column width and turned it to mush */
+  figure.ph img{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;
+    border:1px solid var(--line);border-radius:var(--radius);}
   figure.ph figcaption{margin-top:7px;color:var(--text-dim);font-size:.85rem;text-align:center;}
   figure.ph:not(.missing) figcaption:empty{display:none;}
   figure.ph.missing figcaption{border:1px dashed var(--line);border-radius:var(--radius);padding:18px;
