@@ -330,6 +330,16 @@
     function applyLang(l){
       root.lang=known(l)?l:'en';
       if(langSel) langSel.value=root.lang;
+      var kinds={
+        en:{add:'Added',chg:'Changed',fix:'Fixed'}, ru:{add:'Добавлено',chg:'Изменено',fix:'Исправлено'},
+        de:{add:'Hinzugefügt',chg:'Geändert',fix:'Behoben'}, es:{add:'Añadido',chg:'Cambiado',fix:'Corregido'},
+        ja:{add:'追加',chg:'変更',fix:'修正'}, zh:{add:'新增',chg:'更改',fix:'修复'}
+      }[root.lang]||{add:'Added',chg:'Changed',fix:'Fixed'};
+      document.querySelectorAll('.k').forEach(function(tag){
+        if(tag.classList.contains('k-add')) tag.textContent=kinds.add;
+        else if(tag.classList.contains('k-chg')) tag.textContent=kinds.chg;
+        else if(tag.classList.contains('k-fix')) tag.textContent=kinds.fix;
+      });
       renderNote();store('sf_lang',l);
     }
     // edition is shared with the manual (same localStorage key)
