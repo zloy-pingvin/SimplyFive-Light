@@ -505,10 +505,10 @@
     <div class="skin-copy reveal">
       <p class="eyebrow" data-i18n="spd.eyebrow">Speed</p>
       <h2 class="statement" data-i18n="spd.head">Millions of triangles. LODs in seconds.</h2>
-      <p class="lede" data-i18n-html="spd.body">Less waiting, more time to compare results and fine-tune settings. The add-on works directly with mesh data: it merges vertices and writes normals before creating the LOD objects, without recalculating the modifier stack. Below: generation times for a full set of LODs using the slowest preset:</p>
+      <p class="lede" data-i18n-html="spd.body">Less waiting, more time to compare results and fine-tune settings. The add-on works directly with mesh data: it merges vertices and writes normals before creating the LOD objects, without recalculating the modifier stack. Below: generation times for one LOD at 25% of the source, slowest preset:</p>
       <div class="stats">
-        <div class="stat"><div class="val">6.6 s</div><div class="key" data-i18n="spd.k1">Source: 1.5M triangles</div></div>
-        <div class="stat"><div class="val">0.7 s</div><div class="key" data-i18n="spd.k2">Source: 150k triangles</div></div>
+        <div class="stat"><div class="val">3.6 s</div><div class="key" data-i18n="spd.k1">Source: 1.5M triangles</div></div>
+        <div class="stat"><div class="val">0.6 s</div><div class="key" data-i18n="spd.k2">Source: 150k triangles</div></div>
         <div class="stat"><div class="val">0.04 s</div><div class="key" data-i18n="spd.k3">Source: 10k triangles</div></div>
       </div>
     </div>
@@ -742,10 +742,9 @@
       <div class="pay-card reveal">
         <span class="region" data-i18n="buy.gumroad.region">International</span>
         <h3>Gumroad</h3>
-        <p data-i18n="buy.gumroad.p">Card or PayPal checkout, worldwide. Instant download.</p>
-        <div class="price"><span class="price-now">$14</span></div>
-        <!-- TODO: real product URL, then swap btn-soon for btn-primary and the label back -->
-        <span class="btn btn-soon" data-i18n="buy.gumroad.btn">Coming soon</span>
+        <p data-i18n="buy.gumroad.p">Card or PayPal checkout, worldwide. Instant download. Gumroad takes a high cut, so the price here is the highest — the other checkouts cost you less.</p>
+        <div class="price"><span class="price-now">$22</span></div>
+        <a class="btn btn-primary" href="https://zloy-pingvin.gumroad.com/l/simplyfive-pro" target="_blank" rel="noopener" data-i18n="buy.gumroad.btn">Buy on Gumroad</a>
       </div>
       <div class="pay-card reveal">
         <span class="region" data-i18n="buy.hive.region">International</span>
@@ -815,7 +814,7 @@
       "spd.k3": "Source: 10k triangles",
       "spd.eyebrow": "Speed",
       "spd.head": "Millions of triangles. LODs in seconds.",
-      "spd.body": "Less waiting, more time to compare results and fine-tune settings. The add-on works directly with mesh data: it merges vertices and writes normals before creating the LOD objects, without recalculating the modifier stack. Below: generation times for a full set of LODs using the slowest preset:",
+      "spd.body": "Less waiting, more time to compare results and fine-tune settings. The add-on works directly with mesh data: it merges vertices and writes normals before creating the LOD objects, without recalculating the modifier stack. Below: generation times for one LOD at 25% of the source, slowest preset:",
       "mask.eyebrow": 'Importance mask',
       "mask.head": "More polygons where details matter.",
       "mask.body": "A character’s face, a logo, small details — some areas deserve more geometry. The <b>importance mask</b> lets you choose which areas to protect during simplification and which can be reduced more aggressively.<br><br>Paint the mask with <b>vertex colors</b> or use a <b>vertex group</b>. <b>Importance Strength</b> controls how much of the mask influences simplification, from the most important areas to the entire marked region.<br><br>Need strict protection? <b>PRO</b> includes a <b>hard lock</b>: vertices covered by it are not simplified.",
@@ -881,7 +880,8 @@
       "buy.boosty.region": "RU / CIS + International", "buy.boosty.p": "Card payment — works for Russia, CIS and international cards. Instant access. Discount for Boosty subscribers.", "buy.boosty.btn": "Buy on Boosty", "buy.boosty.old": "$14", "buy.boosty.now": "$6",
       "buy.sale": "sale",
       "buy.stars.region": "International", "buy.stars.p": "Pay with Telegram Stars from anywhere — right inside Telegram, no card or crypto wallet needed.", "buy.stars.btn": "Pay with Telegram Stars",
-      "buy.gumroad.region": "International", "buy.gumroad.p": "Card or PayPal checkout, worldwide. Instant download.", "buy.gumroad.btn": "Coming soon",
+      "buy.gumroad.region": "International", "buy.gumroad.p": 'Card or PayPal checkout, worldwide. Instant download. Gumroad takes a high cut, so the price here is the highest — the other checkouts cost you less.',
+      "buy.gumroad.btn": 'Buy on Gumroad',
       "buy.hive.region": "International", "buy.hive.p": "The Blender marketplace, formerly Blender Market. Card or PayPal.", "buy.hive.btn": "Coming soon",
       "nav.features": "PRO vs Light", "nav.buy": "Buy", "nav.docs": "User Manual", "nav.news": "News", "nav.email": "Email",
       "foot.contact": "Contact the seller here:",
@@ -916,7 +916,7 @@
       "spd.k3": 'Исходник: 10 тыс. треугольников',
       "spd.eyebrow": 'Скорость',
       "spd.head": 'Миллионы треугольников. Секунды на LOD.',
-      "spd.body": 'Меньше ожидания — больше времени сравнить результат и подобрать настройки. Аддон работает напрямую с данными меша: объединяет вершины и записывает нормали ещё до создания LOD-объектов, без пересчёта стека модификаторов. Ниже — время генерации полного набора LOD на самом медленном пресете:',
+      "spd.body": 'Меньше ожидания — больше времени сравнить результат и подобрать настройки. Аддон работает напрямую с данными меша: объединяет вершины и записывает нормали ещё до создания LOD-объектов, без пересчёта стека модификаторов. Ниже — время генерации одного LOD на 25% от исходника, самый медленный пресет:',
       "mask.eyebrow": 'Маска важности',
       "mask.head": 'Важным деталям\u00a0— больше полигонов.',
       "mask.body": 'Лицо персонажа, логотип, мелкие детали — им стоит оставить больше геометрии. <b>Маска важности</b> позволяет указать, какие участки беречь при упрощении, а какие можно сокращать смелее.<br><br>Нарисуйте маску <b>вертексными цветами</b> или используйте <b>группу вершин</b>. Настройка <b>Importance Strength</b> определяет, какая часть маски влияет на упрощение: от самых важных участков до всей отмеченной области.<br><br>Нужна строгая защита? В <b>PRO</b> есть <b>жёсткая блокировка</b>: вершины, попавшие под неё, не упрощаются.',
@@ -982,7 +982,8 @@
       "buy.boosty.region": "РФ / СНГ + межд. карты", "buy.boosty.p": "Оплата картой — Россия, СНГ и международные карты. Мгновенный доступ. Подписчикам Boosty — скидка.", "buy.boosty.btn": "Купить на Boosty", "buy.boosty.old": "1000 ₽", "buy.boosty.now": "500 ₽",
       "buy.sale": "акция",
       "buy.stars.region": "Международно", "buy.stars.p": "Оплата через Telegram Stars из любой точки мира — прямо в Telegram, без карты и криптокошелька.", "buy.stars.btn": "Оплатить Telegram Stars",
-      "buy.gumroad.region": "Международно", "buy.gumroad.p": "Оплата картой или PayPal, из любой страны. Мгновенная загрузка.", "buy.gumroad.btn": "Скоро",
+      "buy.gumroad.region": "Международно", "buy.gumroad.p": 'Оплата картой или PayPal, по всему миру. Мгновенная загрузка. Gumroad берёт высокую комиссию, поэтому цена здесь самая высокая — на других площадках выйдет дешевле.',
+      "buy.gumroad.btn": 'Купить на Gumroad',
       "buy.hive.region": "Международно", "buy.hive.p": "Маркетплейс для Blender, бывший Blender Market. Карта или PayPal.", "buy.hive.btn": "Скоро",
       "nav.features": "PRO и Light", "nav.buy": "Купить", "nav.docs": "Руководство пользователя", "nav.news": "Новости", "nav.email": "Email",
       "foot.contact": "Связаться с продавцом можно тут:",
@@ -1034,8 +1035,8 @@
       "buy.boosty.p": "Kartenzahlung — funktioniert für Russland, die GUS und internationale Karten. Sofortiger Zugang. Rabatt für Boosty-Abonnenten.",
       "buy.boosty.region": "RU / GUS + International",
       "buy.eyebrow": "SimplyFive PRO holen",
-      "buy.gumroad.btn": "Demnächst",
-      "buy.gumroad.p": "Weltweit per Karte oder PayPal bezahlen. Sofortiger Download.",
+      "buy.gumroad.btn": 'Auf Gumroad kaufen',
+      "buy.gumroad.p": 'Kasse mit Karte oder PayPal, weltweit. Sofortiger Download. Gumroad nimmt eine hohe Provision, deshalb ist der Preis hier am höchsten — über die anderen Wege zahlen Sie weniger.',
       "buy.gumroad.region": "International",
       "buy.head": "Vier Zahlungsmöglichkeiten, egal wo Sie sind.",
       "buy.hive.btn": "Demnächst",
@@ -1192,8 +1193,8 @@
       "buy.boosty.p": "Pago con tarjeta para Rusia, la CEI y otros países. Acceso inmediato. Descuento para suscriptores de Boosty.",
       "buy.boosty.region": "RU / CEI + Internacional",
       "buy.eyebrow": "Consigue SimplyFive PRO",
-      "buy.gumroad.btn": "Próximamente",
-      "buy.gumroad.p": "Pago con tarjeta o PayPal, en todo el mundo. Descarga inmediata.",
+      "buy.gumroad.btn": 'Comprar en Gumroad',
+      "buy.gumroad.p": 'Pago con tarjeta o PayPal, en todo el mundo. Descarga inmediata. Gumroad se queda con una comisión alta, así que aquí el precio es el más alto: por las otras vías pagas menos.',
       "buy.gumroad.region": "Internacional",
       "buy.head": "Cuatro formas de pagar, estés donde estés.",
       "buy.hive.btn": "Próximamente",
@@ -1350,8 +1351,8 @@
       "buy.boosty.p": "カード決済 — ロシア、CIS、海外カードに対応。即時アクセス。Boosty 購読者は割引あり。",
       "buy.boosty.region": "ロシア / CIS + 海外",
       "buy.eyebrow": "SimplyFive PRO を入手",
-      "buy.gumroad.btn": "近日公開",
-      "buy.gumroad.p": "カードまたは PayPal で世界中から決済。即時ダウンロード。",
+      "buy.gumroad.btn": 'Gumroad で購入',
+      "buy.gumroad.p": 'カードまたは PayPal で世界中から決済。即時ダウンロード。Gumroad は手数料が高いため、ここでの価格がいちばん高くなります。ほかの決済のほうが安く済みます。',
       "buy.gumroad.region": "海外",
       "buy.head": "どこにいても選べる 4 つの支払い方法。",
       "buy.hive.btn": "近日公開",
@@ -1508,8 +1509,8 @@
       "buy.boosty.p": "银行卡付款 —— 支持俄罗斯、独联体及国际卡。即时获取。Boosty 订阅者另有折扣。",
       "buy.boosty.region": "俄罗斯 / 独联体 + 国际",
       "buy.eyebrow": "获取 SimplyFive PRO",
-      "buy.gumroad.btn": "即将上线",
-      "buy.gumroad.p": "全球范围的银行卡或 PayPal 结账。即时下载。",
+      "buy.gumroad.btn": '在 Gumroad 购买',
+      "buy.gumroad.p": '全球范围的银行卡或 PayPal 结账。即时下载。Gumroad 抽成较高，所以这里的价格最贵 —— 走其他渠道会更便宜。',
       "buy.gumroad.region": "国际",
       "buy.head": "四种付款方式，无论你在哪里。",
       "buy.hive.btn": "即将上线",
