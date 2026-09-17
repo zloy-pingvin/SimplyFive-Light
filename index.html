@@ -382,6 +382,10 @@
   .pay-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.7rem 1.6rem; display: flex; flex-direction: column; gap: 0.7rem; }
   .pay-card.feat { border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
   .pay-card .region { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-2); }
+  .pay-card .cardtop { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+  .pay-card .pick { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent-2) 55%, transparent);
+    padding: 0.22rem 0.5rem; border-radius: 999px; white-space: nowrap; }
   .pay-card h3 { font-size: var(--step-1); font-weight: 700; }
   .pay-card p { margin: 0; color: var(--text-dim); font-size: 0.95rem; line-height: 1.5; flex: 1; }
   .pay-card .price { display: flex; align-items: baseline; gap: 0.55rem; margin-top: 0.3rem; flex-wrap: wrap; }
@@ -726,31 +730,31 @@
 
     <div class="pay-grid">
       <div class="pay-card feat reveal">
-        <span class="region" data-i18n="buy.stars.region">International</span>
+        <div class="cardtop"><span class="region" data-i18n="buy.stars.region">International</span><span class="pick" data-i18n="buy.pick">Best price</span></div>
         <h3>Telegram Stars</h3>
-        <p data-i18n="buy.stars.p">Pay with Telegram Stars from anywhere — right inside Telegram, no card or crypto wallet needed.</p>
+        <p data-i18n="buy.stars.p">Buy the add-on right inside Telegram with Stars — no bank card, no crypto wallet. The fee here is low, so the price is lower and most of what you pay reaches the author.</p>
         <div class="price"><span class="price-old">1000 ⭐</span><span class="price-now">500 ⭐</span><span class="sale" data-i18n="buy.sale">sale</span></div>
         <a class="btn btn-primary" href="https://t.me/simplyfive_shop_bot?start=buy_pro" target="_blank" rel="noopener" data-i18n="buy.stars.btn">Pay with Telegram Stars</a>
       </div>
       <div class="pay-card feat reveal">
-        <span class="region" data-i18n="buy.boosty.region">RU / CIS + International</span>
+        <div class="cardtop"><span class="region" data-i18n="buy.boosty.region">RU / CIS + International</span><span class="pick" data-i18n="buy.pick">Best price</span></div>
         <h3>Boosty</h3>
-        <p data-i18n="buy.boosty.p">Card payment — works for Russia, CIS and international cards. Instant access. Discount for Boosty subscribers.</p>
-        <div class="price"><span class="price-old" data-i18n="buy.boosty.old">$14</span><span class="price-now" data-i18n="buy.boosty.now">$6</span><span class="sale" data-i18n="buy.sale">sale</span></div>
+        <p data-i18n="buy.boosty.p">Card payment — works for Russian, CIS and international cards. Access right after paying, with an extra discount for Boosty subscribers. The fee here is low, so the price is lower and most of what you pay reaches the author.</p>
+        <div class="price"><span class="price-old" data-i18n="buy.boosty.old">$18</span><span class="price-now" data-i18n="buy.boosty.now">$6</span><span class="sale" data-i18n="buy.sale">sale</span></div>
         <a class="btn btn-primary" href="https://boosty.to/zloy_pingvin/posts/a56878a8-fbbf-4546-a40b-b1b503676e20" target="_blank" rel="noopener" data-i18n="buy.boosty.btn">Buy on Boosty</a>
       </div>
       <div class="pay-card reveal">
         <span class="region" data-i18n="buy.gumroad.region">International</span>
         <h3>Gumroad</h3>
-        <p data-i18n="buy.gumroad.p">Card or PayPal checkout, worldwide. Instant download. Gumroad takes a high cut, so the price here is the highest — the other checkouts cost you less.</p>
-        <div class="price"><span class="price-now">$22</span></div>
+        <p data-i18n="buy.gumroad.p">Card or PayPal checkout, worldwide. Instant download. Gumroad adds its fee on top at checkout, so the final amount is higher than through the other options.</p>
+        <div class="price"><span class="price-now">$18</span></div>
         <a class="btn btn-primary" href="https://zloy-pingvin.gumroad.com/l/simplyfive-pro" target="_blank" rel="noopener" data-i18n="buy.gumroad.btn">Buy on Gumroad</a>
       </div>
       <div class="pay-card reveal">
         <span class="region" data-i18n="buy.hive.region">International</span>
         <h3>Superhive Market</h3>
         <p data-i18n="buy.hive.p">The Blender marketplace, formerly Blender Market. Card or PayPal.</p>
-        <div class="price"><span class="price-now">$14</span></div>
+        <div class="price"><span class="price-now">$22</span></div>
         <!-- TODO: real product URL, then swap btn-soon for btn-primary and the label back -->
         <span class="btn btn-soon" data-i18n="buy.hive.btn">Coming soon</span>
       </div>
@@ -786,6 +790,7 @@
   /* ---------------- i18n ---------------- */
   var I18N = {
     en: {
+      "buy.pick": 'Best price',
       "viewer.label": "Image preview",
       "viewer.close": "Close",
       "viewer.original": "Open original size ↗",
@@ -877,10 +882,10 @@
       "f10.k": "Presets", "f10.h": "Save full configs", "f10.p": "Store and load complete configurations as named Blender presets — and there's more beyond this list.",
       "upd.eyebrow": "Free updates & support", "upd.big": "If you buy SimplyFive PRO, future updates are free — they ship with the product.", "upd.p": 'And you are not left alone with it: write to me on <a href="https://t.me/zloy_pingvin" target="_blank" rel="noopener">Telegram</a> or by <a href="mailto:zloy.tux@gmail.com">email</a> about anything at all — a bug, a mesh that will not simplify, a question about settings or a feature you need. I answer personally, and the requests that come in are what the next version gets built from.',
       "buy.eyebrow": "Get SimplyFive PRO", "buy.head": "Four ways to pay, wherever you are.", "buy.lede": 'Pick the checkout that fits your region — they all deliver SimplyFive PRO with the same free updates. Prefer the free version? SimplyFive Light is a free download on <a href="https://github.com/zloy-pingvin/SimplyFive-Light/releases" target="_blank" rel="noopener">GitHub Releases</a>.',
-      "buy.boosty.region": "RU / CIS + International", "buy.boosty.p": "Card payment — works for Russia, CIS and international cards. Instant access. Discount for Boosty subscribers.", "buy.boosty.btn": "Buy on Boosty", "buy.boosty.old": "$14", "buy.boosty.now": "$6",
+      "buy.boosty.region": "RU / CIS + International", "buy.boosty.p": 'Card payment — works for Russian, CIS and international cards. Access right after paying, with an extra discount for Boosty subscribers. The fee here is low, so the price is lower and most of what you pay reaches the author.', "buy.boosty.btn": "Buy on Boosty", "buy.boosty.old": "$18", "buy.boosty.now": "$6",
       "buy.sale": "sale",
-      "buy.stars.region": "International", "buy.stars.p": "Pay with Telegram Stars from anywhere — right inside Telegram, no card or crypto wallet needed.", "buy.stars.btn": "Pay with Telegram Stars",
-      "buy.gumroad.region": "International", "buy.gumroad.p": 'Card or PayPal checkout, worldwide. Instant download. Gumroad takes a high cut, so the price here is the highest — the other checkouts cost you less.',
+      "buy.stars.region": "International", "buy.stars.p": 'Buy the add-on right inside Telegram with Stars — no bank card, no crypto wallet. The fee here is low, so the price is lower and most of what you pay reaches the author.', "buy.stars.btn": "Pay with Telegram Stars",
+      "buy.gumroad.region": "International", "buy.gumroad.p": 'Card or PayPal checkout, worldwide. Instant download. Gumroad adds its fee on top at checkout, so the final amount is higher than through the other options.',
       "buy.gumroad.btn": 'Buy on Gumroad',
       "buy.hive.region": "International", "buy.hive.p": "The Blender marketplace, formerly Blender Market. Card or PayPal.", "buy.hive.btn": "Coming soon",
       "nav.features": "PRO vs Light", "nav.buy": "Buy", "nav.docs": "User Manual", "nav.news": "News", "nav.email": "Email",
@@ -888,6 +893,7 @@
       "foot.small": 'Supports Blender 4.2+ · Powered by <a href="https://github.com/zeux/meshoptimizer" target="_blank" rel="noopener">meshoptimizer</a> (by Arseny Kapoulkine, MIT License) · © 2026 SimplyFive'
     },
     ru: {
+      "buy.pick": 'Лучшая цена',
       "viewer.label": "Просмотр изображения",
       "viewer.close": "Закрыть",
       "viewer.original": "Открыть в исходном размере ↗",
@@ -979,10 +985,10 @@
       "f10.k": "Пресеты", "f10.h": "Сохранение конфигураций", "f10.p": "Сохраняйте и загружайте полные конфигурации как именованные пресеты Blender — и это не всё.",
       "upd.eyebrow": "Бесплатные обновления и поддержка", "upd.big": "Если вы купили SimplyFive PRO, будущие обновления бесплатны — они поставляются вместе с продуктом.", "upd.p": 'И вы с ним не наедине: пишите мне в <a href="https://t.me/zloy_pingvin" target="_blank" rel="noopener">Telegram</a> или на <a href="mailto:zloy.tux@gmail.com">почту</a> по любому вопросу — баг, меш, который не хочет упрощаться, вопрос по настройкам или нужная вам функция. Отвечаю лично, и именно из этих обращений собирается следующая версия.',
       "buy.eyebrow": "Получить SimplyFive PRO", "buy.head": "Четыре способа оплаты — откуда угодно.", "buy.lede": 'Выберите вариант под свой регион — все дают SimplyFive PRO с теми же бесплатными обновлениями. Нужна бесплатная версия? SimplyFive Light можно бесплатно скачать в <a href="https://github.com/zloy-pingvin/SimplyFive-Light/releases" target="_blank" rel="noopener">GitHub Releases</a>.',
-      "buy.boosty.region": "РФ / СНГ + межд. карты", "buy.boosty.p": "Оплата картой — Россия, СНГ и международные карты. Мгновенный доступ. Подписчикам Boosty — скидка.", "buy.boosty.btn": "Купить на Boosty", "buy.boosty.old": "1000 ₽", "buy.boosty.now": "500 ₽",
+      "buy.boosty.region": "РФ / СНГ + межд. карты", "buy.boosty.p": 'Оплата картой — работает для России, СНГ и международных карт. Доступ сразу после оплаты, у подписчиков Boosty дополнительная скидка. Благодаря низкой комиссии цена здесь ниже, а большая часть оплаты идёт автору.', "buy.boosty.btn": "Купить на Boosty", "buy.boosty.old": "1500 ₽", "buy.boosty.now": "500 ₽",
       "buy.sale": "акция",
-      "buy.stars.region": "Международно", "buy.stars.p": "Оплата через Telegram Stars из любой точки мира — прямо в Telegram, без карты и криптокошелька.", "buy.stars.btn": "Оплатить Telegram Stars",
-      "buy.gumroad.region": "Международно", "buy.gumroad.p": 'Оплата картой или PayPal, по всему миру. Мгновенная загрузка. Gumroad берёт высокую комиссию, поэтому цена здесь самая высокая — на других площадках выйдет дешевле.',
+      "buy.stars.region": "Международно", "buy.stars.p": 'Аддон можно купить прямо в Telegram за Stars — без банковской карты и криптокошелька. Благодаря низкой комиссии цена здесь ниже, а большая часть оплаты идёт автору.', "buy.stars.btn": "Оплатить Telegram Stars",
+      "buy.gumroad.region": "Международно", "buy.gumroad.p": 'Оплата картой или PayPal, по всему миру. Мгновенная загрузка. Комиссию Gumroad добавляет сверху при оплате, поэтому итог выходит дороже, чем на других площадках.',
       "buy.gumroad.btn": 'Купить на Gumroad',
       "buy.hive.region": "Международно", "buy.hive.p": "Маркетплейс для Blender, бывший Blender Market. Карта или PayPal.", "buy.hive.btn": "Скоро",
       "nav.features": "PRO и Light", "nav.buy": "Купить", "nav.docs": "Руководство пользователя", "nav.news": "Новости", "nav.email": "Email",
@@ -991,9 +997,10 @@
     }
 ,
     de: {
+      "buy.pick": 'Bester Preis',
       "spd.eyebrow": "Geschwindigkeit",
       "spd.head": "Millionen Dreiecke. LODs in Sekunden.",
-      "spd.body": "Weniger warten, mehr Zeit zum Vergleichen und Abstimmen. Das Add-on arbeitet direkt mit den Mesh-Daten: Es verschmilzt Vertices und schreibt Normalen, bevor die LOD-Objekte entstehen, ohne den Modifier-Stack neu zu berechnen. Hier die Zeiten für einen vollständigen LOD-Satz mit dem langsamsten Preset:",
+      "spd.body": "Weniger warten, mehr Zeit zum Vergleichen und Abstimmen. Das Add-on arbeitet direkt mit den Mesh-Daten: Es verschmilzt Vertices und schreibt Normalen, bevor die LOD-Objekte entstehen, ohne den Modifier-Stack neu zu berechnen. Hier die Zeiten für ein LOD bei 25% des Originals, langsamstes Preset:",
       "spd.k1": "Ausgangsmodell: 1,5 Mio. Dreiecke",
       "spd.k2": "Ausgangsmodell: 150.000 Dreiecke",
       "spd.k3": "Ausgangsmodell: 10.000 Dreiecke",
@@ -1031,12 +1038,12 @@
       "batch.head": "Mehrere Modelle. Eine Warteschlange.",
       "buy.boosty.btn": "Auf Boosty kaufen",
       "buy.boosty.now": "$6",
-      "buy.boosty.old": "$14",
-      "buy.boosty.p": "Kartenzahlung — funktioniert für Russland, die GUS und internationale Karten. Sofortiger Zugang. Rabatt für Boosty-Abonnenten.",
+      "buy.boosty.old": "$18",
+      "buy.boosty.p": 'Kartenzahlung — funktioniert für russische, GUS- und internationale Karten. Zugang direkt nach der Zahlung, für Boosty-Abonnenten mit zusätzlichem Rabatt. Die Gebühr ist niedrig, deshalb ist der Preis hier geringer und der größte Teil der Zahlung kommt beim Autor an.',
       "buy.boosty.region": "RU / GUS + International",
       "buy.eyebrow": "SimplyFive PRO holen",
       "buy.gumroad.btn": 'Auf Gumroad kaufen',
-      "buy.gumroad.p": 'Kasse mit Karte oder PayPal, weltweit. Sofortiger Download. Gumroad nimmt eine hohe Provision, deshalb ist der Preis hier am höchsten — über die anderen Wege zahlen Sie weniger.',
+      "buy.gumroad.p": 'Kasse mit Karte oder PayPal, weltweit. Sofortiger Download. Gumroad schlägt seine Gebühr an der Kasse obendrauf, der Endbetrag liegt also höher als über die anderen Wege.',
       "buy.gumroad.region": "International",
       "buy.head": "Vier Zahlungsmöglichkeiten, egal wo Sie sind.",
       "buy.hive.btn": "Demnächst",
@@ -1045,7 +1052,7 @@
       "buy.lede": "Wählen Sie die Zahlungsoption, die zu Ihrer Region passt — alle liefern SimplyFive PRO mit denselben kostenlosen Updates. Lieber die kostenlose Version? SimplyFive Light gibt es gratis auf <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a>.",
       "buy.sale": "Rabatt",
       "buy.stars.btn": "Mit Telegram Stars zahlen",
-      "buy.stars.p": "Von überall mit Telegram Stars bezahlen — direkt in Telegram, ohne Karte oder Krypto-Wallet.",
+      "buy.stars.p": 'Das Add-on lässt sich direkt in Telegram mit Stars kaufen — ohne Bankkarte und ohne Krypto-Wallet. Die Gebühr ist niedrig, deshalb ist der Preis hier geringer und der größte Teil der Zahlung kommt beim Autor an.',
       "buy.stars.region": "International",
       "chip.clearui": "Übersichtliche Oberfläche",
       "chip.debris": "Entfernt Scanfragmente",
@@ -1149,9 +1156,10 @@
       "why.head": "Die Basis: meshoptimizer."
     },
     es: {
+      "buy.pick": 'Mejor precio',
       "spd.eyebrow": "Velocidad",
       "spd.head": "Millones de triángulos. LODs en segundos.",
-      "spd.body": "Menos espera y más tiempo para comparar resultados y afinar los ajustes. El add-on trabaja directamente con los datos de la malla: fusiona vértices y escribe normales antes de crear los objetos LOD, sin recalcular la pila de modificadores. Estos son los tiempos de generación de un conjunto completo de LODs con el preset más lento:",
+      "spd.body": "Menos espera y más tiempo para comparar resultados y afinar los ajustes. El add-on trabaja directamente con los datos de la malla: fusiona vértices y escribe normales antes de crear los objetos LOD, sin recalcular la pila de modificadores. Estos son los tiempos de generación de un LOD al 25% del original, con el preset más lento:",
       "spd.k1": "Original: 1,5 millones de triángulos",
       "spd.k2": "Original: 150 mil triángulos",
       "spd.k3": "Original: 10 mil triángulos",
@@ -1189,12 +1197,12 @@
       "batch.head": "Varios modelos. Una sola cola.",
       "buy.boosty.btn": "Comprar en Boosty",
       "buy.boosty.now": "$6",
-      "buy.boosty.old": "$14",
-      "buy.boosty.p": "Pago con tarjeta para Rusia, la CEI y otros países. Acceso inmediato. Descuento para suscriptores de Boosty.",
+      "buy.boosty.old": "$18",
+      "buy.boosty.p": 'Pago con tarjeta: funciona con tarjetas rusas, de la CEI e internacionales. Acceso justo después de pagar, con descuento adicional para suscriptores de Boosty. La comisión es baja, así que aquí el precio es menor y la mayor parte del pago llega al autor.',
       "buy.boosty.region": "RU / CEI + Internacional",
       "buy.eyebrow": "Consigue SimplyFive PRO",
       "buy.gumroad.btn": 'Comprar en Gumroad',
-      "buy.gumroad.p": 'Pago con tarjeta o PayPal, en todo el mundo. Descarga inmediata. Gumroad se queda con una comisión alta, así que aquí el precio es el más alto: por las otras vías pagas menos.',
+      "buy.gumroad.p": 'Pago con tarjeta o PayPal, en todo el mundo. Descarga inmediata. Gumroad añade su comisión encima al pagar, así que el importe final sale más alto que por las otras vías.',
       "buy.gumroad.region": "Internacional",
       "buy.head": "Cuatro formas de pagar, estés donde estés.",
       "buy.hive.btn": "Próximamente",
@@ -1203,7 +1211,7 @@
       "buy.lede": "Elige la pasarela que te encaje — todas entregan SimplyFive PRO con las mismas actualizaciones gratuitas. ¿Prefieres la versión gratis? SimplyFive Light se descarga sin coste en <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a>.",
       "buy.sale": "oferta",
       "buy.stars.btn": "Pagar con Telegram Stars",
-      "buy.stars.p": "Paga con Telegram Stars desde cualquier lugar, dentro de Telegram, sin tarjeta ni monedero cripto.",
+      "buy.stars.p": 'Puedes comprar el add-on directamente en Telegram con Stars, sin tarjeta bancaria ni monedero cripto. La comisión es baja, así que aquí el precio es menor y la mayor parte del pago llega al autor.',
       "buy.stars.region": "Internacional",
       "chip.clearui": "Interfaz clara",
       "chip.debris": "Elimina restos del escaneo",
@@ -1307,9 +1315,10 @@
       "why.head": "Basado en meshoptimizer."
     },
     ja: {
+      "buy.pick": '最安',
       "spd.eyebrow": "処理速度",
       "spd.head": "数百万の三角形から、数秒でLODを。",
-      "spd.body": "待ち時間を減らして、結果の比較や設定の調整に時間を使えます。アドオンはメッシュデータを直接処理し、LODオブジェクトを作成する前に頂点の結合と法線の書き込みを行います。モディファイアースタックの再計算は不要です。以下は、最も時間のかかるプリセットで全LODレベルを生成したときの所要時間です。",
+      "spd.body": "待ち時間を減らして、結果の比較や設定の調整に時間を使えます。アドオンはメッシュデータを直接処理し、LODオブジェクトを作成する前に頂点の結合と法線の書き込みを行います。モディファイアースタックの再計算は不要です。以下は、最も時間のかかるプリセットで元モデルの25%のLODを1段階生成したときの所要時間です。",
       "spd.k1": "元モデル：150万三角形",
       "spd.k2": "元モデル：15万三角形",
       "spd.k3": "元モデル：1万三角形",
@@ -1347,12 +1356,12 @@
       "batch.head": "複数のモデルを、ひとつのキューで。",
       "buy.boosty.btn": "Boosty で購入",
       "buy.boosty.now": "$6",
-      "buy.boosty.old": "$14",
-      "buy.boosty.p": "カード決済 — ロシア、CIS、海外カードに対応。即時アクセス。Boosty 購読者は割引あり。",
+      "buy.boosty.old": "$18",
+      "buy.boosty.p": 'カード決済 — ロシア、CIS、海外のカードに対応します。支払い後すぐに利用でき、Boosty の購読者にはさらに割引があります。手数料が低いぶん価格も安く、支払いの大部分が作者に渡ります。',
       "buy.boosty.region": "ロシア / CIS + 海外",
       "buy.eyebrow": "SimplyFive PRO を入手",
       "buy.gumroad.btn": 'Gumroad で購入',
-      "buy.gumroad.p": 'カードまたは PayPal で世界中から決済。即時ダウンロード。Gumroad は手数料が高いため、ここでの価格がいちばん高くなります。ほかの決済のほうが安く済みます。',
+      "buy.gumroad.p": 'カードまたは PayPal で世界中から決済。即時ダウンロード。Gumroad は決済時に手数料を上乗せするため、最終的な支払額はほかの方法より高くなります。',
       "buy.gumroad.region": "海外",
       "buy.head": "どこにいても選べる 4 つの支払い方法。",
       "buy.hive.btn": "近日公開",
@@ -1361,7 +1370,7 @@
       "buy.lede": "地域に合う決済を選んでください。どれも同じ無料アップデート付きの SimplyFive PRO が届きます。無料版がよければ、SimplyFive Light を <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> から無料でダウンロードできます。",
       "buy.sale": "セール",
       "buy.stars.btn": "Telegram Stars で支払う",
-      "buy.stars.p": "どこからでも Telegram Stars で支払い。Telegram の中で完結し、カードも暗号資産ウォレットも不要です。",
+      "buy.stars.p": 'アドオンは Telegram 内で Stars を使ってそのまま購入できます。銀行カードも暗号資産ウォレットも不要です。手数料が低いぶん価格も安く、支払いの大部分が作者に渡ります。',
       "buy.stars.region": "海外",
       "chip.clearui": "分かりやすい UI",
       "chip.debris": "スキャンの不要断片を除去",
@@ -1465,9 +1474,10 @@
       "why.head": "中核を担うのはmeshoptimizer。"
     },
     zh: {
+      "buy.pick": '最优价格',
       "spd.eyebrow": "处理速度",
       "spd.head": "数百万三角面，数秒生成LOD。",
-      "spd.body": "少些等待，多些时间比较结果、调整设置。插件直接处理网格数据，在创建LOD对象前完成顶点合并和法线写入，无需重新计算修改器堆栈。以下是使用最慢预设生成完整一组LOD的耗时：",
+      "spd.body": "少些等待，多些时间比较结果、调整设置。插件直接处理网格数据，在创建LOD对象前完成顶点合并和法线写入，无需重新计算修改器堆栈。以下是使用最慢预设生成一级 LOD（原模型的 25%）的耗时：",
       "spd.k1": "原模型：150万三角面",
       "spd.k2": "原模型：15万三角面",
       "spd.k3": "原模型：1万三角面",
@@ -1505,12 +1515,12 @@
       "batch.head": "多个模型，一个队列。",
       "buy.boosty.btn": "在 Boosty 购买",
       "buy.boosty.now": "$6",
-      "buy.boosty.old": "$14",
-      "buy.boosty.p": "银行卡付款 —— 支持俄罗斯、独联体及国际卡。即时获取。Boosty 订阅者另有折扣。",
+      "buy.boosty.old": "$18",
+      "buy.boosty.p": '银行卡支付 —— 支持俄罗斯、独联体及国际卡。付款后立即获取，Boosty 订阅者另有折扣。这里的手续费低，所以价格更便宜，付款的大部分也会归作者。',
       "buy.boosty.region": "俄罗斯 / 独联体 + 国际",
       "buy.eyebrow": "获取 SimplyFive PRO",
       "buy.gumroad.btn": '在 Gumroad 购买',
-      "buy.gumroad.p": '全球范围的银行卡或 PayPal 结账。即时下载。Gumroad 抽成较高，所以这里的价格最贵 —— 走其他渠道会更便宜。',
+      "buy.gumroad.p": '全球范围的银行卡或 PayPal 结账。即时下载。Gumroad 会在结账时另外加收手续费，所以最终付款金额比其他渠道更高。',
       "buy.gumroad.region": "国际",
       "buy.head": "四种付款方式，无论你在哪里。",
       "buy.hive.btn": "即将上线",
@@ -1519,7 +1529,7 @@
       "buy.lede": "挑一个适合你所在地区的付款方式 —— 它们交付的都是同一个 SimplyFive PRO，同样附带免费更新。更想用免费版？SimplyFive Light 可在 <a href=\"https://github.com/zloy-pingvin/SimplyFive-Light/releases\" target=\"_blank\" rel=\"noopener\">GitHub Releases</a> 免费下载。",
       "buy.sale": "优惠",
       "buy.stars.btn": "用 Telegram Stars 付款",
-      "buy.stars.p": "在任何地方用 Telegram Stars 付款 —— 就在 Telegram 内完成，不需要银行卡或加密钱包。",
+      "buy.stars.p": '可以直接在 Telegram 里用 Stars 购买插件 —— 不需要银行卡，也不需要加密钱包。这里的手续费低，所以价格更便宜，付款的大部分也会归作者。',
       "buy.stars.region": "国际",
       "chip.clearui": "清晰的界面",
       "chip.debris": "清掉扫描碎屑",
