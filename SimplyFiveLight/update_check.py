@@ -2,10 +2,11 @@
 # Copyright (C) 2026 zloy_pingvin
 """Optional version check against a small JSON on the product site.
 
-The request runs on a worker thread that touches nothing but urllib, and the
-answer is handed back through bpy.app.timers - the only place bpy is safe to
-call. Nothing here can block or fail a generation: every error path ends in a
-silent None, and the add-on works exactly the same offline.
+The request runs on a worker thread that touches nothing but urllib and a
+queue; a timer registered on the main thread polls the queue and runs the
+callback there. bpy, bpy.app.timers included, is never called off the main
+thread. Nothing here can block or fail a generation: every error path ends in
+a silent None, and the add-on works exactly the same offline.
 
 Two sources, tried in order. Preferred is a small document next to the site's
 index, all fields optional except "version":
@@ -21,8 +22,11 @@ hence the json first.
 """
 
 import json
+import queue
 import re
 import threading
+import time
+import urllib.parse
 import urllib.request
 
 import bpy
@@ -32,6 +36,10 @@ VERSION_URL = SITE + "version.json"
 PAGE_URL = SITE + "index.html"
 TIMEOUT = 5.0
 CHECK_INTERVAL_DAYS = 1
+POLL_INTERVAL = 0.5
+# Longest the poll waits: two reads, each a connect plus a read under TIMEOUT.
+# Past it the check gives up and the next one may start.
+POLL_LIMIT = 4 * TIMEOUT + 5.0
 
 _running = False
 _cancelled = False
@@ -50,6 +58,25 @@ def parse_version(text):
     if not m:
         return None
     return tuple(int(g) if g else 0 for g in m.groups())
+
+
+def is_site_url(url):
+    """True only for an https link on SITE's host under SITE's path. Parsed,
+    not prefix-matched: 'https://host@evil/...' and 'https://host.evil/...'
+    both start like the site, and '..' can climb out of its folder."""
+    site = urllib.parse.urlsplit(SITE)
+    try:
+        u = urllib.parse.urlsplit(url)
+        # Parsed lazily: a malformed or out-of-range port raises only here.
+        port = u.port
+    except ValueError:
+        return False
+    # Decoded the way a browser reads it: '%2e%2e' and '\' climb out too.
+    path = urllib.parse.unquote(u.path).replace("\\", "/")
+    return (u.scheme == "https" and u.username is None and u.password is None
+            and u.hostname == site.hostname and port is None
+            and path.startswith(site.path)
+            and ".." not in path.split("/"))
 
 
 def is_newer(latest, current):
@@ -77,16 +104,38 @@ def _fetch(url, page_url):
     return {"version": match.group(1), "url": page_url}
 
 
-def _worker(url, callback, page_url):
-    global _running
+def _worker(url, page_url, inbox):
+    """Off the main thread: urllib and the queue only."""
     try:
         data = _fetch(url, page_url)
     except Exception as exc:
         print(f"[LOD Generator] update check failed: {exc}")
         data = None
+    inbox.put_nowait(data)
 
-    def deliver():
+
+def start(url, callback, page_url=PAGE_URL):
+    """Returns False if a check is already in flight. Main thread only: the
+    poll timer is registered here, never from the worker."""
+    global _running, _cancelled
+    if _running:
+        return False
+    _running = True
+    _cancelled = False
+    # One queue per check, so a worker that answers after its poll gave up
+    # writes into nothing the next check reads.
+    inbox = queue.Queue(maxsize=1)
+    deadline = time.monotonic() + POLL_LIMIT
+
+    def poll():
         global _running
+        try:
+            data = inbox.get_nowait()
+        except queue.Empty:
+            if not _cancelled and time.monotonic() < deadline:
+                return POLL_INTERVAL
+            _running = False
+            return None
         _running = False
         if not _cancelled:
             try:
@@ -95,22 +144,11 @@ def _worker(url, callback, page_url):
                 print(f"[LOD Generator] update check callback failed: {exc}")
         return None
 
-    # persistent: this is the only place _running is cleared, and a file
-    # load between the request and the answer used to drop the timer - after
-    # which the button answered "already checking" for the rest of the
-    # session and the automatic check never ran again.
-    bpy.app.timers.register(deliver, first_interval=0.0, persistent=True)
-
-
-def start(url, callback, page_url=PAGE_URL):
-    """Returns False if a check is already in flight."""
-    global _running, _cancelled
-    if _running:
-        return False
-    _running = True
-    _cancelled = False
-    threading.Thread(target=_worker, args=(url, callback, page_url),
+    threading.Thread(target=_worker, args=(url, page_url, inbox),
                      daemon=True).start()
+    # persistent, or a file load while the request is out removes it - and
+    # _running is cleared nowhere else, so every later check is refused.
+    bpy.app.timers.register(poll, first_interval=POLL_INTERVAL, persistent=True)
     return True
 
 

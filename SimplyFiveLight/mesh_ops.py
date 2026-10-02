@@ -8,7 +8,9 @@ import time - before try_load_native() has actually set it.
 import bmesh
 import bpy
 import ctypes
+import hashlib
 import math
+import traceback
 import numpy as np
 
 from . import native_build
@@ -31,6 +33,26 @@ def get_evaluated_mesh(context, obj):
     eval_obj = obj.evaluated_get(depsgraph)
     me = eval_obj.to_mesh()
     return eval_obj, me
+
+
+def mesh_fingerprint(me):
+    """Hash of what both source scans read: positions, triangles, UV names and
+    values. A modifier that moves vertices or writes UVs keeps every count, so
+    counts alone let a scan of one mesh answer for another."""
+    me.calc_loop_triangles()
+    h = hashlib.blake2b(digest_size=16)
+    pos = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", pos)
+    h.update(pos.tobytes())
+    tri = np.empty(len(me.loop_triangles) * 3, dtype=np.int32)
+    me.loop_triangles.foreach_get("vertices", tri)
+    h.update(tri.tobytes())
+    uv = np.empty(len(me.loops) * 2, dtype=np.float32)
+    for layer in me.uv_layers:
+        h.update(layer.name.encode("utf-8"))
+        layer.uv.foreach_get("vector", uv)
+        h.update(uv.tobytes())
+    return h.hexdigest()
 
 
 def mesh_to_position_buffers(me):
@@ -154,7 +176,7 @@ def find_coincident_faces(me):
     tri_vert = np.empty(n_tri * 3, dtype=np.int32)
     me.loop_triangles.foreach_get("vertices", tri_vert)
     key = _triangle_keys(pos_id, tri_vert)
-    uniq, first, inverse, counts = np.unique(
+    _, first, inverse, counts = np.unique(
         key, return_index=True, return_inverse=True, return_counts=True)
     doubled = counts > 1
     if not doubled.any():
@@ -288,16 +310,14 @@ def source_is_flat_shaded(me):
 
     Attributes are matched while iterating rather than by name lookup, for the
     reason spelled out in deselect_mesh_elements."""
-    # has_custom_normals, not a 'custom_normal' entry in me.attributes: in 4.2
-    # they sit in a legacy layer and never show up there, so scanning the
-    # attributes calls a flat mesh that carries them flat and drops them - a
-    # hard-surface model then arrives with no shading at all, silently.
+    # has_custom_normals, never a 'custom_normal' entry in me.attributes: in
+    # 4.2 they sit in a legacy layer and never show up there, so a name scan
+    # calls a flat mesh that carries them flat and drops them - a hard-surface
+    # model then arrives with no shading at all, silently.
     if getattr(me, "has_custom_normals", False):
         return False
     sharp = None
     for attr in me.attributes:
-        if attr.name == "custom_normal":
-            return False
         if attr.name == "sharp_face":
             sharp = attr
     if sharp is None or not len(me.polygons) or len(sharp.data) != len(me.polygons):
@@ -440,6 +460,10 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
         active = me.uv_layers.active
         uv_layers = [active] if active is not None else []
         active_index = 0
+    # On the list before blanks are taken out: the LOD puts them back in place,
+    # so a position counted after the drop lands on the wrong layer.
+    active_render = next(
+        (k for k, layer in enumerate(uv_layers) if layer.active_render), 0)
     blank = []
     if skip_unwrapped_uv and uv_layers:
         # Names, not indices: the scan runs over every layer, this list may be
@@ -457,8 +481,7 @@ def mesh_to_attribute_buffers(me, use_multi_uv=False, vgroup_weights=None,
         "names": [layer.name for layer in uv_layers],
         "blank": blank,                    # (source position, name), no data
         "active_index": active_index,
-        "active_render": next(
-            (k for k, layer in enumerate(uv_layers) if layer.active_render), 0),
+        "active_render": active_render,
     }
     color_layer = me.color_attributes.active_color if me.color_attributes else None
     color_per_loop = color_layer is not None and color_layer.domain == 'CORNER'
@@ -580,7 +603,7 @@ OVERDRAW_THRESHOLD = 1.05
 
 
 def gpu_optimize_buffers(positions, faces, corner_attr=None, colors=None,
-                         remap_vertices=True):
+                         remap_vertices=True, importance=None):
     """Reorder the finished buffers the way a GPU walks them: triangles for
     the post-transform vertex cache, then for overdraw, then vertices for
     fetch locality. Nothing moves in space and no triangle appears or
@@ -589,10 +612,11 @@ def gpu_optimize_buffers(positions, faces, corner_attr=None, colors=None,
     Returns everything unchanged when the library predates these calls, and
     skips the vertex pass when some vertex is unreferenced, since the remap
     leaves those out. faces stays indexed into positions; corner_attr follows
-    the triangle order because normals, UVs and materials are read through it."""
+    the triangle order because normals, UVs and materials are read through it.
+    colors and importance are per vertex and follow the vertex remap."""
     cache_fn = native_build.optimize_vertex_cache_fn()
     if cache_fn is None or faces is None or len(faces) == 0:
-        return positions, faces, corner_attr, colors
+        return positions, faces, corner_attr, colors, importance
     faces = np.ascontiguousarray(faces, dtype=np.uint32).reshape(-1, 3)
     n_vert = int(positions.shape[0])
     idx_ptr, idx = as_c_uint_p(faces.ravel())
@@ -634,8 +658,12 @@ def gpu_optimize_buffers(positions, faces, corner_attr=None, colors=None,
                 moved = np.empty_like(colors)
                 moved[order] = colors
                 colors = moved
+            if importance is not None:
+                moved = np.empty_like(importance)
+                moved[order] = importance
+                importance = moved
             new_faces = remap[new_faces]
-    return positions, new_faces, corner_attr, colors
+    return positions, new_faces, corner_attr, colors, importance
 
 
 GPU_ORDER_MARK = "sf_gpu_order"
@@ -683,7 +711,7 @@ def reorder_object_for_gpu(obj):
     me.vertices.foreach_get("co", pos)
 
     faces = tri_vert.reshape(-1, 3)
-    _, new_faces, tri_perm, _ = gpu_optimize_buffers(
+    _, new_faces, tri_perm, _, _ = gpu_optimize_buffers(
         pos.reshape(-1, 3), faces, np.arange(n_tri * 3).reshape(-1, 3),
         None, remap_vertices=False)
     tri_order = tri_perm[:, 0] // 3
@@ -714,43 +742,54 @@ def reorder_object_for_gpu(obj):
     # them back after, following the corners through a scratch layer bmesh
     # carries for us - an attribute, not a Python walk, so a dense mesh does
     # not pay for it.
+    # A layer left by an earlier run that died half way would make the one
+    # created below "<name>.001" while get() read the stale one back.
+    stale = me.attributes.get(GPU_ORDER_TRACE)
+    if stale is not None:
+        me.attributes.remove(stale)
     carry_normals = me.has_custom_normals
-    if carry_normals:
-        n_loop = len(me.loops)
-        old_normals = np.empty(n_loop * 3, dtype=np.float32)
-        me.corner_normals.foreach_get("vector", old_normals)
-        old_normals = old_normals.reshape(-1, 3)
-        me.attributes.new(GPU_ORDER_TRACE, 'INT', 'CORNER').data.foreach_set(
-            "value", np.arange(n_loop, dtype=np.int32))
+    bm = None
+    try:
+        if carry_normals:
+            n_loop = len(me.loops)
+            old_normals = np.empty(n_loop * 3, dtype=np.float32)
+            me.corner_normals.foreach_get("vector", old_normals)
+            old_normals = old_normals.reshape(-1, 3)
+            me.attributes.new(GPU_ORDER_TRACE, 'INT', 'CORNER').data.foreach_set(
+                "value", np.arange(n_loop, dtype=np.int32))
 
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    bm.verts.ensure_lookup_table()
-    bm.faces.ensure_lookup_table()
-    if vert_remap is not None:
-        rank = {v: int(r) for v, r in zip(bm.verts, vert_remap.tolist())}
-        bm.verts.sort(key=rank.__getitem__)
-    if not face_identity:
-        # face_order lists polygons in their new order; invert it to a rank.
-        rank_of = np.empty(len(face_order), dtype=np.int64)
-        rank_of[face_order] = np.arange(len(face_order))
-        frank = {f: int(r) for f, r in zip(bm.faces, rank_of.tolist())}
-        bm.faces.sort(key=frank.__getitem__)
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+        if vert_remap is not None:
+            rank = {v: int(r) for v, r in zip(bm.verts, vert_remap.tolist())}
+            bm.verts.sort(key=rank.__getitem__)
+        if not face_identity:
+            # face_order lists polygons in their new order; invert it to a rank.
+            rank_of = np.empty(len(face_order), dtype=np.int64)
+            rank_of[face_order] = np.arange(len(face_order))
+            frank = {f: int(r) for f, r in zip(bm.faces, rank_of.tolist())}
+            bm.faces.sort(key=frank.__getitem__)
+        bm.to_mesh(me)
+        bm.free()
+        bm = None
+        me.update()
 
-    if carry_normals:
-        trace = me.attributes.get(GPU_ORDER_TRACE)
-        try:
+        if carry_normals:
+            trace = me.attributes.get(GPU_ORDER_TRACE)
             if trace is not None:
                 order = np.empty(len(me.loops), dtype=np.int32)
                 trace.data.foreach_get("value", order)
                 me.normals_split_custom_set(old_normals[order])
-        finally:
-            trace = me.attributes.get(GPU_ORDER_TRACE)
-            if trace is not None:
-                me.attributes.remove(trace)
+    finally:
+        # The user's own lod_0 goes through here: the scratch layer must not
+        # stay on it and ship with the export, whatever failed.
+        if bm is not None:
+            bm.free()
+        trace = me.attributes.get(GPU_ORDER_TRACE)
+        if trace is not None:
+            me.attributes.remove(trace)
 
     mark_gpu_ordered(me)
     return True
@@ -1022,6 +1061,61 @@ def native_simplify_attributes(positions, normals, uvs, has_uv, indices,
     return destination[:count], result_error.value
 
 
+# Furthest a seam wedge's solved normal may sit from its group's mean and still
+# be unified. Measured splits across a seam on a smooth source run to 32
+# degrees between the two sides (ivy), 16 from the mean.
+WEDGE_UNIFY_MAX_ANGLE = math.radians(45.0)
+# Faces of one group further apart than this are a fold. The folds that zero
+# a fan measure dot -1.0 (car); a smooth-shaded right-angle corner is 0, and
+# rejecting it kept 282 seam edges sharp on the searchlight instead of 66.
+WEDGE_FOLD_DOT = math.cos(math.radians(120.0))
+
+
+def unify_wedge_normals(positions, normals, new_normals, indices, new_positions):
+    """The solve fits each wedge's normal on its own, so the two sides of a UV
+    seam come back up to 32 degrees apart (ivy, 20%) and Blender marks every
+    such edge sharp - an engine then splits vertices along it. Wedges that
+    shared both position and normal in the source get the mean of their solved
+    normals; a real hard edge, split in the source, stays split. So does a
+    group spread wider than WEDGE_UNIFY_MAX_ANGLE, or one whose wedges' own
+    faces point against each other: one normal across a fold makes Blender
+    zero the fan. Faces against faces, not against the normal: foliage normals
+    point away from the plant, not along the card. Only corners the index
+    buffer uses are touched."""
+    if normals is None or len(indices) == 0:
+        return new_normals
+    tris = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+    used = np.unique(tris)
+    key = (_position_ids(positions[used]) * np.int64(len(used))
+           + _position_ids(np.asarray(normals, dtype=np.float32)[used]))
+    first, group = np.unique(key, return_index=True, return_inverse=True)[1:]
+    group = group.ravel()
+    if len(first) == len(used):
+        return new_normals
+    n = new_normals[used].astype(np.float64)
+    mean = np.stack([np.bincount(group, weights=n[:, k], minlength=len(first))
+                     for k in range(3)], axis=1)
+    length = np.linalg.norm(mean, axis=1, keepdims=True)
+    np.divide(mean, length, out=mean, where=length > 1e-12)
+    spread = np.ones(len(first))
+    np.minimum.at(spread, group, np.einsum('ij,ij->i', n, mean[group]))
+    # Area-weighted normal of each wedge's own triangles, on the solved shape.
+    v = np.asarray(new_positions, dtype=np.float64)[tris]
+    cross = np.cross(v[:, 1] - v[:, 0], v[:, 2] - v[:, 0])
+    row = np.searchsorted(used, tris)
+    face_n = np.stack([np.bincount(row.ravel(), weights=np.repeat(cross[:, k], 3),
+                                   minlength=len(used)) for k in range(3)], axis=1)
+    face_n /= np.maximum(np.linalg.norm(face_n, axis=1, keepdims=True), 1e-30)
+    facing = np.ones(len(first))
+    np.minimum.at(facing, group, np.einsum('ij,ij->i', face_n, face_n[first][group]))
+    ok = ((length[:, 0] > 1e-12)
+          & (spread >= np.cos(WEDGE_UNIFY_MAX_ANGLE))
+          & (facing > WEDGE_FOLD_DOT))[group]
+    out = np.array(new_normals, copy=True)
+    out[used[ok]] = mean[group[ok]].astype(out.dtype, copy=False)
+    return out
+
+
 def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
                                  target_index_count, target_error, options,
                                  normal_weight, uv_weight, vertex_lock=None,
@@ -1035,6 +1129,7 @@ def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
     attrs, weights = _build_attr_array(
         normals, uvs, has_uv, normal_weight, uv_weight, importance, importance_weight)
 
+    src_positions = positions
     positions = np.ascontiguousarray(positions, dtype=np.float32).copy()
     indices = np.ascontiguousarray(indices, dtype=np.uint32).copy()
     attrs = np.ascontiguousarray(attrs, dtype=np.float32)
@@ -1078,6 +1173,8 @@ def native_simplify_with_update(positions, normals, uvs, has_uv, indices,
         # be renormalized or clamped after the function returns new data").
         lengths = np.linalg.norm(new_normals, axis=1, keepdims=True)
         np.divide(new_normals, lengths, out=new_normals, where=lengths > 1e-12)
+        new_normals = unify_wedge_normals(src_positions, normals, new_normals,
+                                          new_indices, positions)
     else:
         new_normals = np.array(normals, dtype=np.float32, copy=True)
     if not has_uv:
@@ -1191,7 +1288,15 @@ def decimate_to_target(obj, target_tris, vertex_group=None, vertex_group_factor=
         # Blender clamps this at 1000; our 0-1 strength maps so that the 0.5
         # default lands on Blender's own default factor of 1.0.
         mod.vertex_group_factor = min(1000.0, max(0.0, vertex_group_factor) * 2.0)
-    bpy.ops.object.modifier_apply(modifier=mod.name)
+    # A failed apply leaves the modifier live on the LOD and the caller's
+    # count is then the buffer's; drop it so the mesh matches the number.
+    try:
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+    except Exception:
+        stale = obj.modifiers.get(mod.name)
+        if stale is not None:
+            obj.modifiers.remove(stale)
+        raise
     return mesh_tri_count(obj.data)
 
 
@@ -1366,7 +1471,9 @@ def generate_normals(obj, crease_angle=SMOOTH_CREASE_ANGLE, smoothing=SMOOTH_REL
     loop_normals[loops] = result.reshape(-1, 3)
     # A flat-shaded face ignores custom normals, so make sure none are left.
     me.polygons.foreach_set("use_smooth", np.ones(len(me.polygons), dtype=np.int32))
-    me.normals_split_custom_set(loop_normals.tolist())
+    # The array as itself: .tolist() cost 677 MB and 0.7 s on a 4.4M-corner
+    # sculpt for byte-identical normals.
+    me.normals_split_custom_set(loop_normals)
     return True
 
 
@@ -1581,8 +1688,29 @@ def stuck_materials(retention, materials):
 
 def build_object_from_buffers(name, collections, positions, faces, normals=None, uvs=None,
                                materials=None, mat_ids=None, uv_info=None,
-                               colors=None, color_info=None, corner_attr=None):
+                               colors=None, color_info=None, corner_attr=None,
+                               notes=None):
+    """notes gets ('normals_failed', None) when Blender refuses the custom
+    normals."""
     mesh = bpy.data.meshes.new(name)
+    # An exception past this point would leave a mesh with no users in the
+    # file until the next save purges it.
+    try:
+        _fill_mesh_from_buffers(mesh, name, positions, faces, normals, uvs,
+                                materials, mat_ids, uv_info, colors,
+                                color_info, corner_attr, notes)
+    except Exception:
+        bpy.data.meshes.remove(mesh)
+        raise
+    obj = bpy.data.objects.new(name, mesh)
+    for collection in collections:
+        collection.objects.link(obj)
+    return obj
+
+
+def _fill_mesh_from_buffers(mesh, name, positions, faces, normals, uvs,
+                            materials, mat_ids, uv_info, colors, color_info,
+                            corner_attr, notes):
     # Filled through foreach_set rather than from_pydata: the latter needs the
     # buffers as Python lists, which on a multi-million-triangle LOD costs more
     # than everything else here put together. Triangles only, so the polygon
@@ -1635,33 +1763,41 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
     if colors is not None and color_info and color_info["names"]:
         # colors is (N, 4*num_layers). Always written as POINT domain:
         # per-vertex is all the pipeline carries (see mesh_to_attribute_buffers).
+        names = []
         for k, (cname, ctype) in enumerate(zip(color_info["names"], color_info["types"])):
             attr = mesh.color_attributes.new(name=cname, type=ctype, domain='POINT')
             flat = np.ascontiguousarray(colors[:, 4 * k:4 * k + 4], dtype=np.float32).ravel()
             attr.data.foreach_set("color", flat)
+            names.append(attr.name)
+        # By name, never by the source's index: up to 5.0 the collection is
+        # listed grouped by type (byte before float), not in creation order,
+        # so with mixed types the same index is another layer.
+        listed = [c.name for c in mesh.color_attributes]
         render_idx = color_info["render_index"]
-        if 0 <= render_idx < len(mesh.color_attributes):
-            mesh.color_attributes.render_color_index = render_idx
+        if 0 <= render_idx < len(names) and names[render_idx] in listed:
+            mesh.color_attributes.render_color_index = listed.index(names[render_idx])
         active_idx = color_info["active_index"]
-        if 0 <= active_idx < len(mesh.color_attributes):
-            mesh.color_attributes.active_color_index = active_idx
+        if 0 <= active_idx < len(names) and names[active_idx] in listed:
+            mesh.color_attributes.active_color_index = listed.index(names[active_idx])
 
     if normals is not None:
         try:
             if corner_attr is not None:
                 # Welded vertices carry several normals, so per corner, and
-                # against final topology. The array goes in as itself:
-                # .tolist() here costs gigabytes of small Python lists.
+                # against final topology. Arrays go in as themselves on both
+                # branches: .tolist() costs gigabytes of small Python lists.
                 mesh.normals_split_custom_set(
                     np.ascontiguousarray(normals, dtype=np.float32)[corner_vert])
             elif hasattr(mesh, "normals_split_custom_set_from_vertices"):
                 mesh.normals_split_custom_set_from_vertices(
-                    np.ascontiguousarray(normals, dtype=np.float32).tolist())
-        except Exception:
-            # Blender rejects custom normals on degenerate results (zero-area
-            # or unreferenced verts after an aggressive collapse). The mesh is
-            # still valid - it just keeps face normals.
-            pass
+                    np.ascontiguousarray(normals, dtype=np.float32))
+        except Exception as exc:
+            # Every face is already smooth, so the LOD comes out fully smooth.
+            # Reported, not patched over: the user picks what replaces them.
+            print(f"[LOD Generator] {name}: custom normals could not be "
+                  f"written, the LOD is fully smooth: {exc}")
+            if notes is not None:
+                notes.append(("normals_failed", None))
 
     if materials:
         for mat in materials:
@@ -1675,11 +1811,96 @@ def build_object_from_buffers(name, collections, positions, faces, normals=None,
         mesh.polygons.foreach_set(
             "material_index", np.clip(per_face, 0, len(mesh.materials) - 1))
 
-    obj = bpy.data.objects.new(name, mesh)
-    for collection in collections:
-        collection.objects.link(obj)
-    return obj
 
+# Past this much uncertainty (see shape_loss) the volume is not a measurement
+# any more and is dropped outright rather than reported with a caveat.
+VOLUME_UNCERTAIN_MAX = 0.5
+
+
+def shape_extent(positions, indices, chunk=1 << 19):
+    """Volume, vector area, surface area and bounding box of a triangle soup,
+    in one pass over the corners. Volume is the divergence integral,
+    (1/6)*sum(v0 . v1xv2), taken about the origin; shape_loss moves it. float64
+    throughout: the tetrahedra cancel against each other, and in float32 that
+    cancellation eats four digits at a million triangles. Chunked to cap the
+    temporaries at ~50 MB whatever the mesh. Pro measured 280 ms at 1.5M
+    triangles, against seconds for the collapse it sits next to."""
+    tri = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+    if tri.shape[0] == 0:
+        return None
+    pos = np.asarray(positions, dtype=np.float64)
+    vol6 = 0.0
+    area2 = 0.0
+    vec2 = np.zeros(3)
+    lo = np.full(3, np.inf)
+    hi = np.full(3, -np.inf)
+    for start in range(0, tri.shape[0], chunk):
+        blk = tri[start:start + chunk]
+        a, b, c = pos[blk[:, 0]], pos[blk[:, 1]], pos[blk[:, 2]]
+        n = np.cross(b - a, c - a)
+        vol6 += float(np.einsum('ij,ij->i', a, np.cross(b, c)).sum())
+        area2 += float(np.linalg.norm(n, axis=1).sum())
+        vec2 += n.sum(axis=0)
+        for arr in (a, b, c):
+            lo = np.minimum(lo, arr.min(axis=0))
+            hi = np.maximum(hi, arr.max(axis=0))
+    return {"volume": vol6 / 6.0,          # signed, about the origin
+            # Vector area: zero on a closed surface, and also on an open one
+            # whose boundaries cancel. Exactly when it is zero the volume
+            # stops depending on where the origin is.
+            "vec": vec2 / 2.0,
+            "area": area2 / 2.0,
+            "centre": (lo + hi) / 2.0,
+            "diag": float(np.linalg.norm(hi - lo)),
+            "size": hi - lo}
+
+
+def volume_about(m, origin):
+    """The same surface's volume measured about another point. Translating by
+    o turns 6V into 6V - o.(2*vec), so no second pass over the mesh is needed.
+    Zero correction on a closed surface, where vec is zero."""
+    return m["volume"] - float(np.dot(origin, m["vec"])) / 3.0
+
+
+def shape_loss(src, lod):
+    """What the collapse cost the shape rather than the count: the LOD against
+    the buffer the simplifier was handed. The bounding box sees only the
+    extreme points, and those are what the error metric protects first; volume
+    sees everything between them, which is where a section caving in shows.
+
+    Both volumes are taken about the source's bounding-box centre, which is
+    what makes the number usable on open meshes. The origin term cancels out
+    of the difference as far as the two vector areas agree, so an open
+    boundary costs precision, not validity: moving the reference point by up
+    to half the diagonal would swing the difference by
+    |diag/2 . (vec_src - vec_lod)|/3, and that over the source volume is
+    'uncertainty' - an error bar on 'volume'. Near zero whenever the boundary
+    held.
+
+    Volume is dropped on a shell too thin for it to mean anything, and when
+    the error bar is so wide the number says nothing. Purely diagnostic."""
+    if not src or not lod:
+        return None
+    axis = 0.0
+    for i in range(3):
+        if src["size"][i] > 1e-9:
+            axis = max(axis, 1.0 - float(lod["size"][i]) / float(src["size"][i]))
+    volume = None
+    uncertainty = 0.0
+    moved = float(np.linalg.norm(src["vec"] - lod["vec"]))
+    origin = src["centre"]
+    v_src = volume_about(src, origin)
+    v_lod = volume_about(lod, origin)
+    thin = abs(v_src) < src["area"] * src["diag"] / 100.0
+    if not thin:
+        uncertainty = (src["diag"] / 2.0) * moved / 3.0 / abs(v_src)
+        if uncertainty <= VOLUME_UNCERTAIN_MAX:
+            volume = 1.0 - v_lod / v_src
+    return {"axis": axis, "volume": volume, "uncertainty": uncertainty,
+            # Console only: how far the open boundary travelled, as a share of
+            # the source's area.
+            "boundary": moved / src["area"] if src["area"] > 0.0 else 0.0,
+            "thin": thin}
 
 
 def simplify_object(context, src, ratio, target_error, options, use_attributes,
@@ -1693,30 +1914,8 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                      smooth_crease_angle=SMOOTH_CREASE_ANGLE,
                      skip_unwrapped_uv=False, drop_duplicates=False,
                      gpu_order=False, source_scan=None,
-                     preprune_budget=1.0, retarget_steps=0, target_tris=0):
-    eval_obj, me = get_evaluated_mesh(context, src)
-    # The scan the operator took on lod_0. Both checks are whole-mesh passes
-    # costing seconds at a million triangles, so every LOD after the first
-    # reads them instead of repeating them. The shape check rejects a scan
-    # taken on another mesh - or one taken unevaluated while the source carries
-    # modifiers.
-    me.calc_loop_triangles()
-    if source_scan is not None and not (
-            source_scan.get("tris") == len(me.loop_triangles)
-            and source_scan.get("loops") == len(me.loops)
-            and source_scan.get("uv_names") == tuple(l.name for l in me.uv_layers)):
-        source_scan = None
-    dup_keep = source_scan.get("keep") if source_scan else None
-    unwrapped_names = source_scan.get("unwrapped") if source_scan else None
-    if source_scan and source_scan.get("no_duplicates"):
-        drop_duplicates = False
-    # Set when duplicate triangles were dropped: 'before' and the percentage
-    # must still be reported against the source, not the shrunken buffer.
-    source_index_count = None
-    new_mat_ids = None
-    new_colors = None
-    uv_info = None
-    color_info = None
+                     preprune_budget=1.0, retarget_steps=0, target_tris=0,
+                     check_shape=True):
     # Codes, not sentences: the panel turns them into fixed phrases so each one
     # is translated on its own, and only a finished level knows which of them
     # happened - the Mode can switch a pass on behind the user's back.
@@ -1725,7 +1924,34 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # finally below, so nothing after it may touch `me`.
     src_slot_tris = None
     n_slots = 0
+    # Basis of the shape check, taken where the simplifier itself starts.
+    src_shape = None
+    eval_obj = None
     try:
+        eval_obj, me = get_evaluated_mesh(context, src)
+        # The scan the operator took on lod_0. Both checks are whole-mesh
+        # passes costing seconds at a million triangles, so every LOD after the
+        # first reads them instead of repeating them. The operator scanned
+        # this same object evaluated the same way this press, so the name is
+        # enough; anything else is checked by fingerprint - counts alone let a
+        # modifier that moves vertices or writes UVs pass.
+        me.calc_loop_triangles()
+        if (source_scan is not None
+                and source_scan.get("evaluated_as") != src.name
+                and source_scan.get("fingerprint") != mesh_fingerprint(me)):
+            source_scan = None
+        dup_keep = source_scan.get("keep") if source_scan else None
+        unwrapped_names = source_scan.get("unwrapped") if source_scan else None
+        if source_scan and source_scan.get("no_duplicates"):
+            drop_duplicates = False
+        # Set when duplicate triangles were dropped: 'before' and the
+        # percentage must still be reported against the source, not the
+        # shrunken buffer.
+        source_index_count = None
+        new_mat_ids = None
+        new_colors = None
+        uv_info = None
+        color_info = None
         # Materials must come from the evaluated object/mesh - the same data
         # mat_ids are read from. src.data.materials misses materials that are
         # linked to the OBJECT (material slots, e.g. on Alt+D instances) or
@@ -1751,11 +1977,19 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
         vgroup_weights = None
         if use_attributes and use_vcolor_importance and importance_source == 'VGROUP':
             vgroup_weights = read_vertex_group_weights(eval_obj, me, importance_vgroup)
+            # No weight anywhere is no mask: an empty group reads back as zeros.
+            if vgroup_weights is not None and not vgroup_weights.any():
+                vgroup_weights = None
             if vgroup_weights is None:
                 notes.append(("mask_group", importance_vgroup))
+                state = ("is empty" if importance_vgroup in src.vertex_groups
+                         else "not found")
                 print(f"[LOD Generator] Importance vertex group "
-                      f"'{importance_vgroup}' not found on {src.name} - "
+                      f"'{importance_vgroup}' {state} on {src.name} - "
                       f"simplifying without an importance mask.")
+                # Off for the level: without weights mesh_to_attribute_buffers
+                # falls back to the colour layer, and the mask followed colours.
+                use_vcolor_importance = False
         # Flat faces plus custom normals is what an FBX/OBJ import usually
         # produces, and the dedup key cannot survive it - see the function.
         if use_attributes and repack_flat_custom_normals(me):
@@ -1850,6 +2084,10 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     # there - it runs first and its count is the true source.
                     if source_index_count is None:
                         source_index_count = len(indices) + removed * 3
+            # After the duplicate drop and the pre-prune, so neither is billed
+            # to the collapse.
+            if check_shape:
+                src_shape = shape_extent(positions, indices)
             options = apply_sparse_option(options, positions, indices)
 
             if use_vertex_update:
@@ -1915,13 +2153,18 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                     # there - it runs first and its count is the true source.
                     if source_index_count is None:
                         source_index_count = len(indices) + removed * 3
+            if check_shape:
+                src_shape = shape_extent(positions, indices)
             options = apply_sparse_option(options, positions, indices)
             simplified, result_error = native_simplify_positions(
                 positions, indices, target_index_count, target_error, options)
             (new_pos, new_faces, new_norm, new_uv, new_mat_ids, new_colors,
              new_importance) = compact_after_simplify(positions, simplified)
     finally:
-        eval_obj.to_mesh_clear()
+        # Opened before the evaluation: an error there or in the scan check
+        # would otherwise leave the temporary mesh behind.
+        if eval_obj is not None:
+            eval_obj.to_mesh_clear()
 
     # On the buffers, not on the built object: the mesh is born welded, so the
     # custom normals below are written against topology that no longer moves.
@@ -1948,12 +2191,23 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # the Decimate finish - the ordering is redone on the finished object
     # instead, at the end of this function.
     rebuilt_after = merge_on_object or use_decimate_finish
+    # The mark is a claim about the mesh: set only when the order really
+    # changed. gpu_optimize_buffers hands the buffers back untouched on a
+    # library without the calls.
+    gpu_done = False
     if gpu_order and not rebuilt_after:
-        try:
-            new_pos, new_faces, corner_attr, new_colors = gpu_optimize_buffers(
-                new_pos, new_faces, corner_attr, new_colors)
-        except Exception as exc:
-            print(f"[LOD Generator] GPU order optimization skipped on {name}: {exc}")
+        if not native_build.has_gpu_optimize():
+            print(f"[LOD Generator] GPU order skipped on {name}: this "
+                  f"meshoptimizer build has no reordering calls")
+        else:
+            try:
+                (new_pos, new_faces, corner_attr, new_colors,
+                 new_importance) = gpu_optimize_buffers(
+                    new_pos, new_faces, corner_attr, new_colors,
+                    importance=new_importance)
+                gpu_done = True
+            except Exception as exc:
+                print(f"[LOD Generator] GPU order optimization skipped on {name}: {exc}")
 
     before_tris = (source_index_count if source_index_count is not None
                    else len(indices)) // 3
@@ -1964,6 +2218,14 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # about the behavior changes.
     if new_faces.shape[0] == 0:
         if len(indices) < 3:
+            # source_index_count is set by whichever step shrank the buffer
+            # first (duplicate drop, Pre-prune). Pre-prune has no cap in
+            # Light, and a model of small parts only can lose all of them.
+            if source_index_count is not None and source_index_count >= 3:
+                raise SimplifyEmpty(
+                    f"{name}: nothing was left to simplify - duplicate removal "
+                    f"or Pre-prune took every triangle. Use a Mode without "
+                    f"Pre-prune (Careful or Standard)")
             raise SimplifyEmpty(f"{name}: the source mesh has no triangles")
         raise SimplifyEmpty(
             f"{name}: simplification returned 0 triangles. Lower Target Error "
@@ -1983,7 +2245,7 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
         materials=materials if any(m is not None for m in materials) else None,
         mat_ids=new_mat_ids, uv_info=uv_info,
         colors=new_colors, color_info=color_info,
-        corner_attr=corner_attr,
+        corner_attr=corner_attr, notes=notes,
     )
     # Mirror the source's place in the hierarchy: same parent (if any),
     # same world transform either way.
@@ -2016,6 +2278,9 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
             merge_by_distance(obj, merge_threshold)
         except Exception as exc:
             print(f"[LOD Generator] Merge by Distance failed on {obj.name}: {exc}")
+        # The operator weld can collapse faces; the count above is from the
+        # buffers. A Decimate finish below re-reads it too.
+        after_tris = mesh_tri_count(obj.data)
 
     # After the weld: the mesh keeps per-corner UVs, which is what lets Decimate
     # interpolate them instead of snapping across seams.
@@ -2027,6 +2292,8 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
                 vertex_group_factor=importance_weight)
         except Exception as exc:
             print(f"[LOD Generator] Decimate finish failed on {obj.name}: {exc}")
+            traceback.print_exc()
+            notes.append(("decimate_failed", None))
         if importance_group_name:
             # Internal artifact (it holds inverted importance) - don't leave it
             # on the finished LOD. Looked up again by name, and inside the try:
@@ -2057,15 +2324,28 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # After the Decimate finish, so the generator sees the topology that is
     # actually left - recalculating before it would describe a mesh that no
     # longer exists.
-    if use_smooth_normals and not generate_normals(obj, smooth_crease_angle):
-        print(f"[LOD Generator] meshoptimizer in this build cannot generate "
-              f"normals - {obj.name} keeps the normals it was built with")
+    # A failure keeps the LOD and says so in the panel: it was built without
+    # the source normals, so it is fully smooth until they are recalculated.
+    if use_smooth_normals:
+        try:
+            recalculated = generate_normals(obj, smooth_crease_angle)
+            if not recalculated:
+                print(f"[LOD Generator] meshoptimizer in this build cannot "
+                      f"generate normals - {obj.name} keeps the normals it "
+                      f"was built with")
+        except Exception as exc:
+            print(f"[LOD Generator] Recalculate + Smooth failed on "
+                  f"{obj.name}: {exc}")
+            traceback.print_exc()
+            recalculated = False
+        if not recalculated:
+            notes.append(("normals_post_failed", None))
 
     if gpu_order:
         try:
             if rebuilt_after:
                 reorder_object_for_gpu(obj)
-            else:
+            elif gpu_done:
                 mark_gpu_ordered(obj.data)   # done on the buffers above
         except Exception as exc:
             print(f"[LOD Generator] GPU order optimization skipped on "
@@ -2074,6 +2354,29 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     # Last, once the mesh is final: Merge by Distance selects everything to do
     # its work, so clearing the selection any earlier would be undone.
     deselect_mesh_elements(obj.data)
+
+    # On the finished object, not on the buffers: the Decimate finish and the
+    # Edit Mode weld both cut further, and measuring before them would flatter
+    # every level that used one. The LOD is small, so reading it back is cheap.
+    # No source measurement means the check is off in Preferences.
+    shape = None
+    if src_shape is not None:
+        try:
+            shape = shape_loss(src_shape,
+                               shape_extent(*mesh_to_position_buffers(obj.data)))
+            if shape is not None:
+                # Every level, not only when the panel complains: the
+                # thresholds still want a sweep, and the numbers behind a
+                # notice - or behind its absence - are read here.
+                vol = ("volume n/a (thin shell)" if shape["thin"] else
+                       "volume n/a (error bar too wide)" if shape["volume"] is None
+                       else f"volume {-100.0 * shape['volume']:+.1f}% "
+                            f"+-{100.0 * shape['uncertainty']:.1f}")
+                print(f"[LOD Generator] {obj.name} shape: {vol}, "
+                      f"box {-100.0 * shape['axis']:+.1f}%, "
+                      f"boundary shift {100.0 * shape['boundary']:.2f}% of area")
+        except Exception as exc:
+            print(f"[LOD Generator] Shape check skipped on {obj.name}: {exc}")
 
     # Diagnostics only, and it must stay that way: a raise in here would come
     # out as "No LODs were generated" on a level that generated perfectly
@@ -2098,6 +2401,6 @@ def simplify_object(context, src, ratio, target_error, options, use_attributes,
     except Exception as exc:
         print(f"[LOD Generator] material report skipped on {obj.name}: {exc}")
     report = {"notes": notes, "retention": retention,
-              "stuck": stuck, "stuck_share": stuck_share}
+              "stuck": stuck, "stuck_share": stuck_share, "shape": shape}
 
     return obj, before_tris, after_tris, result_error, report

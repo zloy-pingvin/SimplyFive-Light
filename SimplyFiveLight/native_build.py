@@ -21,9 +21,14 @@ def get_dll_ext():
 
 
 _native_lib = None
-MESHOPT_PERMISSIVE = 16      # meshopt_SimplifyPermissive; overwritten from flags below
-MESHOPT_VERTEX_PROTECT = 1   # meshopt_SimplifyVertex_Protect; overwritten from flags below
-MESHOPT_VERTEX_PRIORITY = 4  # meshopt_SimplifyVertex_Priority (1<<2); overwritten below
+# One entry per CDLL() call that succeeded, stored or not: each holds a Windows
+# lock on its file until unload_native() frees it.
+_loaded_handles = []
+# Fallbacks for a missing meshopt_flags.json, the values of meshoptimizer 1.2
+# and 1.3 as Pro's build checks them against the header.
+MESHOPT_PERMISSIVE = 32      # meshopt_SimplifyPermissive
+MESHOPT_VERTEX_PROTECT = 2   # meshopt_SimplifyVertex_Protect
+MESHOPT_VERTEX_PRIORITY = 4  # meshopt_SimplifyVertex_Priority
 
 c_float_p = ctypes.POINTER(ctypes.c_float)
 c_uint_p = ctypes.POINTER(ctypes.c_uint)
@@ -178,6 +183,9 @@ def try_load_native():
 
     try:
         lib = ctypes.CDLL(dll_path)
+        # Before the signatures: a library that loads but fails typing still
+        # locks its file.
+        _loaded_handles.append(lib._handle)
         _configure_signatures(lib)
         _native_lib = lib
 
@@ -199,3 +207,25 @@ def try_load_native():
     except Exception as exc:
         print(f"[LOD Generator] Could not load bundled native library: {exc}")
         return False
+
+
+def unload_native():
+    """Last step of unregister(). Blender reinstalls by disabling, then
+    deleting the add-on folder; Windows refuses to delete a loaded DLL, and the
+    new copy would get the old image by the same path until a restart.
+    _native_lib goes to None before the free, so a late caller gets a Python
+    error instead of a call into unmapped code."""
+    global _native_lib
+    _native_lib = None
+    handles = _loaded_handles[:]
+    _loaded_handles.clear()
+    if not sys.platform.startswith("win"):
+        return
+    # Own WinDLL instance: argtypes on the shared ctypes.windll would leak to
+    # every other add-on. c_void_p, since a 64-bit HMODULE overflows c_int.
+    free_library = ctypes.WinDLL("kernel32", use_last_error=True).FreeLibrary
+    free_library.argtypes = [ctypes.c_void_p]
+    free_library.restype = ctypes.c_int
+    for handle in reversed(handles):
+        if not free_library(handle):
+            print(f"[LOD Generator] FreeLibrary failed: {ctypes.get_last_error()}")

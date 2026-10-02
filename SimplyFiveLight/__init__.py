@@ -10,7 +10,7 @@ bl_info = {
     # A literal, never a name: addon_utils._fake_module ast.literal_evals
     # this dict without importing, and a name hides the add-on from the
     # Add-ons list on the legacy path.
-    "version": (1, 4, 1),
+    "version": (1, 4, 4),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar (N-panel) > LODS",
     "description": (
@@ -39,13 +39,7 @@ import math
 import re
 import textwrap
 import time
-
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except Exception:
-    np = None
-    NUMPY_AVAILABLE = False
+import traceback
 
 
 MAX_LODS = 5
@@ -132,6 +126,21 @@ def resume_edit_mode(context, name):
         print(f"[LOD Generator] Could not return to Edit Mode on {name}: {exc}")
 
 
+def stopped_midway(op, context):
+    """An unexpected error inside a generation: the scene is part way through,
+    lod_0 renamed or copied and some levels built. FINISHED, not CANCELLED, so
+    the partial work gets an undo step of its own and one Ctrl+Z takes all of
+    it back; a failed operator pushes none. Edit Mode comes back first."""
+    traceback.print_exc()
+    try:
+        resume_edit_mode(context, getattr(op, "_editing", None))
+    except Exception:
+        traceback.print_exc()
+    op.report({'ERROR'}, bpy.app.translations.pgettext_rpt(
+        "Generation stopped part way - see System Console. Ctrl+Z undoes what it did."))
+    return {'FINISHED'}
+
+
 def retarget_edit_name(name, lod0):
     """resolve_lod0 renames the source to '<base><suffix>0', so a name taken
     before it stops resolving - which meant the user was never put back into
@@ -208,6 +217,34 @@ def drop_physics_roles(dup):
             coll.objects.unlink(dup)
 
 
+# Written on the copy "Keep the original object" makes, holding the name of the
+# object it was copied from. Identity, not decoration: a name alone cannot tell
+# our zero level from a stranger that happens to be called '<base><suffix>0'.
+LODGEN_COPY_OF = "lodgen_copy_of"
+
+# Renames forced by a taken name, filled by resolve_lod0 and published into the
+# panel by the generate operators. A module global, not a scene property:
+# resolve_lod0 takes no props.
+_RENAME_NOTES = []
+
+
+def _note_rename(old, new):
+    line = f"{old} -> {new}"
+    if line not in _RENAME_NOTES:
+        _RENAME_NOTES.append(line)
+    print(f"[LOD Generator] name taken, renamed: {line}")
+
+
+def _publish_rename_note(props, base):
+    props.rename_note = "\n".join(_RENAME_NOTES)
+    props.rename_note_for = base
+
+
+def _rename_owns(props, base):
+    """Is the stored rename note about the family now on screen?"""
+    return bool(props.rename_note) and props.rename_note_for == base
+
+
 def duplicate_as_lod0(obj, base):
     """Copy obj into '<base><suffix>0' and hide the original, for "Keep the
     original object".
@@ -226,6 +263,9 @@ def duplicate_as_lod0(obj, base):
     lod0.data = obj.data.copy()
     lod0.name = lod_name(base, 0)
     lod0.data.name = lod0.name
+    # Without it resolve_lod0 adopted whatever was called '<base><suffix>0'
+    # and handed a foreign object to the simplifier.
+    lod0[LODGEN_COPY_OF] = obj.name
     for coll in (obj.users_collection or (bpy.context.scene.collection,)):
         # object.copy() already put a rigid body into RigidBodyWorld, and
         # users_collection lists it too; linking it twice raises.
@@ -297,35 +337,136 @@ def deform_notice(obj):
     return None
 
 
-def resolve_lod0(obj):
-    """Return (base_name, lod0_object). Renames obj to '<name><suffix>0' the
-    first time any LOD is generated for it, per the naming convention the
-    whole LOD family (index 0 = original, 1..N = generated) relies on - or
-    copies it instead, when "Keep the original object" is on."""
-    m = match_lod_name(obj.name)
-    if m:
-        base = m.group(1)
-        if m.group(2) == '0':
-            return base, obj
-        lod0 = bpy.data.objects.get(lod_name(base, 0))
-        return base, (lod0 if lod0 is not None else obj)
-    base = obj.name
-    if get_pref('keep_original', False):
-        # Checking for an existing lod_0 first is mandatory: without it, a
-        # second run started from the hidden original makes a second copy.
-        lod0 = bpy.data.objects.get(lod_name(base, 0))
-        return base, (lod0 if lod0 is not None else duplicate_as_lod0(obj, base))
-    obj.name = lod_name(base, 0)
-    if obj.data:
-        obj.data.name = obj.name
+def _flush_rename():
     # Blender counts a rename as a geometry update. Without flushing it here it
-    # arrives after the scan below is cached and kills the entry at once - the
+    # arrives after the source scan is cached and kills the entry at once - the
     # first generation on an object without the suffix never cached anything.
     try:
         bpy.context.view_layer.update()
     except Exception:
         pass
-    return base, obj
+
+
+def _is_our_lod0(lod0, src_name=None):
+    """Is this lod_0 a "Keep the original object" copy - of src_name, when
+    given? Copies made before the tag existed carry none, so they are
+    recognised by the source parked beside them instead: the base name, hidden
+    from renders, and the same vertex and polygon counts. A wrong answer there
+    costs the old behaviour, which adopted any lod_0 by name alone."""
+    marked = lod0.get(LODGEN_COPY_OF)
+    if isinstance(marked, str):
+        return src_name is None or marked == src_name
+    m = match_lod_name(lod0.name)
+    if m is None:
+        return False
+    parked = bpy.data.objects.get(m.group(1))
+    if parked is None or (src_name is not None and parked.name != src_name):
+        return False
+    a, b = getattr(parked, "data", None), getattr(lod0, "data", None)
+    return bool(parked.hide_render
+                and getattr(a, "vertices", None) is not None
+                and getattr(b, "vertices", None) is not None
+                and len(a.vertices) == len(b.vertices)
+                and len(a.polygons) == len(b.polygons))
+
+
+def _free_name(candidates):
+    """First candidate no object holds. bpy.data, not the view layer: a name
+    taken in a hidden collection collides just as hard."""
+    name = None
+    for name in candidates:
+        if name not in bpy.data.objects:
+            return name
+    return name
+
+
+def _parked_name(name):
+    return _free_name([f"{name}_original"]
+                      + [f"{name}_original_{n}" for n in range(1, 1000)])
+
+
+def _resolve_family_base(obj, name):
+    """(base, its lod_0 or None) for a source that is no family's level. Walks
+    '<name>', '<name>_1', '<name>_2', ... until the lod_0 slot is free or holds
+    our own copy of this same object. A taken slot used to send the rename to
+    the '.001' Blender picks, which match_lod_name does not recognise, or hand
+    the stranger holding it to the simplifier."""
+    base = existing = None
+    for n in range(1000):
+        base = name if n == 0 else f"{name}_{n}"
+        existing = bpy.data.objects.get(lod_name(base, 0))
+        if existing is None or _is_our_lod0(existing, obj.name):
+            break
+    return base, existing
+
+
+def resolve_lod0(obj):
+    """Return (base_name, lod0_object). Renames obj to '<name><suffix>0' the
+    first time any LOD is generated for it, per the naming convention the
+    whole LOD family (index 0 = original, 1..N = generated) relies on - or
+    copies it instead, when "Keep the original object" is on.
+
+    Every name clash around an existing lod_0 is resolved here rather than
+    refused, and every rename is recorded for the panel."""
+    keep = get_pref('keep_original', False)
+    m = match_lod_name(obj.name)
+    if m:
+        base = m.group(1)
+        if m.group(2) == '0':
+            if not keep or _is_our_lod0(obj):
+                return base, obj
+            # The user's own object already holds the family name, so no copy
+            # was ever made: the switch protected nothing while Optimize for
+            # GPU rewrote that object's vertex order. Park the original under
+            # _original and let the copy take the name.
+            old_name = obj.name
+            obj.name = _parked_name(old_name)
+            if obj.data:
+                obj.data.name = obj.name
+            _note_rename(old_name, obj.name)
+            lod0 = duplicate_as_lod0(obj, base)
+            _flush_rename()
+            return base, lod0
+        lod0 = bpy.data.objects.get(lod_name(base, 0))
+        if lod0 is not None:
+            return base, lod0
+        # The family lost its lod_0: the selected level starts a family of its
+        # own, X_lod_2 -> X_lod_2_lod_0. Taken as X's lod_0 it was the object
+        # generate_one_lod removed when rebuilding level 2.
+        name = obj.name
+        if keep:
+            # Parked out of family X too: regenerating X would otherwise
+            # remove it by its level name.
+            parked = _parked_name(name)
+            _note_rename(name, parked)
+            obj.name = parked
+            if obj.data:
+                obj.data.name = parked
+        base, lod0 = _adopt_source(obj, name, keep)
+        if lod0 is obj:
+            _note_rename(name, obj.name)
+        return base, lod0
+    return _adopt_source(obj, obj.name, keep)
+
+
+def _adopt_source(obj, name, keep):
+    """resolve_lod0 for an object that is no family's level: renamed to
+    <name><suffix>0, or copied there under "Keep the original object"."""
+    base, existing = _resolve_family_base(obj, name)
+    if base != name:
+        _note_rename(lod_name(name, 0), lod_name(base, 0))
+    if keep or existing is not None:
+        # An existing lod_0 means the copy was already made: never a second
+        # one. It is the family's zero level with the switch off as well - the
+        # name is taken, so renaming onto it is not an option.
+        lod0 = existing if existing is not None else duplicate_as_lod0(obj, base)
+    else:
+        obj.name = lod_name(base, 0)
+        if obj.data:
+            obj.data.name = obj.name
+        lod0 = obj
+    _flush_rename()
+    return base, lod0
 
 
 
@@ -503,27 +644,13 @@ def subtree_x_span(root):
     return 0.0 if lo is None else hi - lo
 
 
-# Panel draw() runs on every UI redraw (each mouse move / slider tick), so
-# the triangle count must not loop over polygons in Python there - on
-# multi-million-poly meshes that froze the whole UI while editing LOD
-# settings. Counted in C via foreach_get and cached until the mesh's
-# polygon/vertex counts change.
-_tri_count_cache = {}
-
-
+# Panel draw() runs on every UI redraw, so the count must not loop over
+# polygons in Python. A polygon of n corners is n - 2 triangles, which makes
+# the total two O(1) lengths, exact after any edit - unlike a cache keyed by
+# mesh name and checked by polygon and vertex counts, both of which survive a
+# topology change and a file load.
 def mesh_tri_count(me):
-    validity = (len(me.polygons), len(me.vertices))
-    cached = _tri_count_cache.get(me.name)
-    if cached is not None and cached[0] == validity:
-        return cached[1]
-    if NUMPY_AVAILABLE:
-        loop_totals = np.empty(validity[0], dtype=np.int32)
-        me.polygons.foreach_get("loop_total", loop_totals)
-        tri_count = int(np.maximum(loop_totals - 2, 0).sum())
-    else:
-        tri_count = sum(len(p.vertices) - 2 for p in me.polygons)
-    _tri_count_cache[me.name] = (validity, tri_count)
-    return tri_count
+    return len(me.loops) - 2 * len(me.polygons)
 
 
 def in_view_layer(context, obj):
@@ -570,7 +697,10 @@ FACTORY_MODE_PRESETS = {
                      use_attributes=True, use_vertex_update=False,
                      normal_weight=0.5, uv_weight=0.5, target_error=0.02,
                      preprune_threshold=0.0, use_decimate_finish=False),
-    'STANDARD': dict(lock_border=True,
+    # Open edges unlocked, as in Pro: with the lock a character's small open
+    # cards (lashes, brows) cannot collapse at all and the skin takes the whole
+    # cut - measured on a head at 15%, 20.5% kept with it, 15.0% without.
+    'STANDARD': dict(lock_border=False,
                       use_prune=False, use_permissive=False, protect_uv_seams=False, protect_material_borders=False,
                       use_attributes=True, use_vertex_update=True,
                       normal_weight=0.5, uv_weight=0.5, target_error=0.15,
@@ -690,6 +820,11 @@ class LodGenAddonPreferences(bpy.types.AddonPreferences):
                     "The dropped copy takes its material with it, so a material "
                     "used only by that copy disappears from the LOD - the panel "
                     "says which")
+    check_silhouette: bpy.props.BoolProperty(
+        name="Check Silhouette", default=True,
+        description="Compare each level's volume and size with the source and "
+                    "warn in the panel when the shape collapsed. A message "
+                    "only, the LOD is not changed. Off skips the measurement")
 
     def draw(self, context):
         layout = self.layout
@@ -763,6 +898,7 @@ class LodGenAddonPreferences(bpy.types.AddonPreferences):
         sub.separator(factor=2.0)
         sub.prop(self, "skip_unwrapped_uv")
         box.separator()
+        box.prop(self, "check_silhouette")
         box.prop(self, "restore_edit_mode")
 
         layout.separator()
@@ -819,7 +955,7 @@ SMOOTH_NORMALS_MODES = {'VERY_AGGRESSIVE', 'VERY_AGGRESSIVE_ALT'}
 # Threshold (revealed by Hard-Lock, which cannot be switched on here).
 PRO_ONLY_SLOT_FIELDS = (
     "use_previous_lod", "limit_prune", "normals_mode", "regularize_mode",
-    "blend_colors_meshopt",
+    "blend_colors_meshopt", "dilate_borders",
 )
 # Same rules, but on the global props: Light's importance mask is one setting
 # for all LODs, so Hard-Lock is drawn there instead of per LOD.
@@ -851,6 +987,13 @@ def pro_only_annotations():
                         "percentage, Target Error is lowered and simplification "
                         "re-run. Turn off when Prune is meant to strip parts "
                         "on a distant LOD"),
+        # Off in every Pro Mode, so Lock Open Edges above it keeps its own row
+        # here: Pro swaps that row for a notice only once this is ticked.
+        'dilate_borders': bpy.props.BoolProperty(
+            name="Dilate Borders", default=False,
+            description="Push open edges outward to give back the area of "
+                        "removed leaves and cards. For foliage only. Turns off "
+                        "Lock Open Edges"),
         # The modes are spelled out here because a greyed dropdown cannot be
         # opened - the per-item descriptions below are unreachable.
         'normals_mode': bpy.props.EnumProperty(
@@ -926,7 +1069,8 @@ def make_lod_slot_class(class_name, default_percent, default_mode):
         'result_status': bpy.props.EnumProperty(
             name="Result", default='NONE', options={'HIDDEN'},
             items=[('NONE', "None", ""), ('OK', "On target", ""),
-                   ('HIGH', "Above target", ""), ('LOW', "Below target", "")]),
+                   ('HIGH', "Above target", ""), ('LOW', "Below target", ""),
+                   ('FAILED', "Not built", "")]),
         'result_level': bpy.props.EnumProperty(
             name="Result Level", default='NONE', options={'HIDDEN'},
             items=[('NONE', "None", ""), ('INFO', "Info", ""),
@@ -1011,8 +1155,7 @@ def make_lod_slot_class(class_name, default_percent, default_mode):
             name="Permissive (aggressive)", default=preset['use_permissive'],
             description="meshopt_SimplifyPermissive: allows collapsing across "
                         "UV/normal seams while the error stays acceptable. Lower "
-                        "triangle count for some UV distortion. Experimental "
-                        "upstream"),
+                        "triangle count for some UV distortion"),
         'use_attributes': bpy.props.BoolProperty(
             name="Preserve UVs & Normals", default=preset['use_attributes'],
             description="meshopt_simplifyWithAttributes: UV seams and hard edges "
@@ -1064,6 +1207,12 @@ def make_lod_slot_class(class_name, default_percent, default_mode):
         'show_details': bpy.props.BoolProperty(
             name="Details", default=False,
             description="Show the advanced per-LOD settings for this LOD"),
+        # The count line of the result block is this toggle, so a click on it
+        # folds the explanation away and leaves the numbers.
+        'show_result': bpy.props.BoolProperty(
+            name="Result", default=True,
+            description="Show why this level came out the way it did. "
+                        "Collapsed, the count line stays"),
     }
     # Only the self-hosted build draws the greyed Pro mirror, so only it needs
     # the fields to draw from - the store build carries none of them.
@@ -1113,6 +1262,14 @@ def _lineup_restore(context):
     props.lineup_active = False
 
 
+def _preview_level(family, wanted):
+    """The level the distance slider shows: wanted, else the nearest lower one
+    the family has, else its first. A gap - a failed, deleted or excluded
+    level - must not leave the view where it was."""
+    lower = [i for i in family if i <= wanted]
+    return max(lower) if lower else min(family)
+
+
 def _on_lod_preview_change(self, context):
     """Distance-slider: 0 shows only lod_0, N shows only lod_N. Uses the
     exact same show/hide mechanism as the 'Only This LOD' buttons, so there
@@ -1126,9 +1283,9 @@ def _on_lod_preview_change(self, context):
     # A property callback swallows its exception, so an unreachable member
     # would leave the family half switched with nothing said.
     family = reachable_family(context, find_lod_family(base))
-    target_idx = min(self.lod_preview, self.lod_count)
-    if target_idx not in family:
+    if not family:
         return
+    target_idx = _preview_level(family, min(self.lod_preview, self.lod_count))
     for idx, o in family.items():
         o.hide_set(idx != target_idx)
         o.select_set(idx == target_idx)
@@ -1378,12 +1535,16 @@ class LodGenPropsLight(bpy.types.PropertyGroup):
         name="Hierarchy Note", default="", options={'HIDDEN'},
         description="Parents that have no LOD of their own at some level, so "
                     "an empty stands in for them there")
+    # On by default, as in Pro: off, the second map - usually a lightmap - is
+    # lost. A never-unwrapped map that would lock the mesh is already left out
+    # by Ignore Unwrapped UV Maps, which is on by default too.
     use_multi_uv: bpy.props.BoolProperty(
-        name="Multiple UV Channels", default=False,
-        description="Carry every UV channel onto the LODs, keeping names and "
-                    "active/render flags. All of them enter the error metric "
-                    "with the same UV Weight, so extra seams constrain "
-                    "simplification. Off = only the active channel is copied")
+        name="Multiple UV Channels", default=True,
+        # Pro's wording, less its sentence about the batch queue.
+        description="Carry every UV map onto the LODs, with names and "
+                    "active/render flags. Seams of every map constrain "
+                    "simplification; a map that blocks it is named in the "
+                    "panel. Off: only the active map")
     use_vcolor_importance: bpy.props.BoolProperty(
         name="Importance Mask", default=False,
         description="Bias simplification with a per-vertex importance map: "
@@ -1432,6 +1593,12 @@ class LodGenPropsLight(bpy.types.PropertyGroup):
     coincident_note: bpy.props.StringProperty(default="", options={'HIDDEN'})
     unwrapped_uv_note: bpy.props.StringProperty(default="", options={'HIDDEN'})
     blocking_uv_note: bpy.props.StringProperty(default="", options={'HIDDEN'})
+    # "multi_uv" when turning Multiple UV Channels off would leave no blocking
+    # map (the active one is not among them), else "".
+    blocking_uv_lever: bpy.props.StringProperty(default="", options={'HIDDEN'})
+    # "old -> new" per line, and the family it happened on.
+    rename_note: bpy.props.StringProperty(default="", options={'HIDDEN'})
+    rename_note_for: bpy.props.StringProperty(default="", options={'HIDDEN'})
 
 
 # Hard-Lock is Pro-only, and Light's importance mask is one global setting
@@ -1490,28 +1657,26 @@ def _drop_all_scans(*args):
     _SOURCE_SCANS.clear()
 
 
-def new_source_scan(props, lod0):
-    """Shape of the mesh both scans ran on, so simplify_object can tell whether
-    their results still apply to what it is about to simplify."""
-    me = lod0.data
-    me.calc_loop_triangles()
-    return {"tris": len(me.loop_triangles), "loops": len(me.loops),
-            "uv_names": tuple(l.name for l in me.uv_layers),
-            "mesh": me.name, "keep": None, "no_duplicates": False,
+def new_source_scan(lod0, me):
+    """Fingerprint of the mesh both scans run on (me, lod0 evaluated), so
+    simplify_object can tell whether their results apply to what it is about
+    to simplify. "mesh" is lod0's own data, which _drop_stale_scans watches."""
+    return {"fingerprint": mesh_ops.mesh_fingerprint(me),
+            "mesh": lod0.data.name, "keep": None, "no_duplicates": False,
             "unwrapped": None, "coincident_note": "", "unwrapped_note": "",
-            "blocking_note": "",
+            "uv_found": [],
             "checked": (get_pref('check_duplicate_faces', True),
                         get_pref('check_unwrapped_uv', True))}
 
 
-def scan_coincident(props, base, lod0, scan=None):
+def scan_coincident(props, base, lod0, me, scan=None):
     """Run on lod_0 at generation time and cached; the panel only reads. Keyed
-    on base, not on lod0.name: resolve_lod0 falls back to the selected LOD when
-    lod_0 is missing. Failure is non-fatal - a warning must never take a
+    on base, not on lod0.name: under "Keep the original object" lod0 is a copy
+    named after base. Failure is non-fatal - a warning must never take a
     generation down."""
     props.coincident_for = base
     try:
-        found = mesh_ops.find_coincident_faces(lod0.data)
+        found = mesh_ops.find_coincident_faces(me)
     except Exception as exc:
         print(f"[LOD Generator] coincident-surface scan failed on "
               f"{lod0.name}: {exc}")
@@ -1535,64 +1700,85 @@ def scan_coincident(props, base, lod0, scan=None):
     return note
 
 
-def scan_unwrapped_uv(props, base, lod0, scan=None):
-    """Cached alongside scan_coincident, same rules. Returns the names of the
-    layers that can be dropped; layers that block but carry real coordinates
-    go to blocking_uv_note and are only reported."""
+def scan_unwrapped_uv(props, base, lod0, me, scan=None):
+    """Cached alongside scan_coincident, same rules. Covers every map, carried
+    or not, so the cache holds whatever Multiple UV Channels says;
+    _publish_uv_notes turns it into the panel notes each press. Default maps
+    can be dropped, the rest block but carry real coordinates and are only
+    reported."""
     props.coincident_for = base
-    props.blocking_uv_note = ""
     try:
-        found = mesh_ops.find_unwrapped_uv_layers(lod0.data)
+        found = mesh_ops.find_unwrapped_uv_layers(me)
     except Exception as exc:
         print(f"[LOD Generator] UV scan failed on {lod0.name}: {exc}")
-        props.unwrapped_uv_note = ""
-        return ""
+        found = []
     if scan is not None:
         scan["unwrapped"] = frozenset(f["name"] for f in found if f["default"])
-    if not found:
-        props.unwrapped_uv_note = ""
-        return ""
+        scan["uv_found"] = [(f["name"], f["default"]) for f in found]
     for f in found:
         print(f"[LOD Generator] {lod0.name}: UV map '{f['name']}' locks "
               f"{100 * f['locked']:.0f}% of vertices with 3+ UVs. "
               + ("Never unwrapped - Blender's own per-face fill."
                  if f["default"] else
                  "Its coordinates are real, so it is reported only."))
-    props.blocking_uv_note = ", ".join(f["name"] for f in found
-                                       if not f["default"])
-    if scan is not None:
-        scan["blocking_note"] = props.blocking_uv_note
-    note = ", ".join(f["name"] for f in found if f["default"])
-    props.unwrapped_uv_note = note
-    return note
+
+
+def _publish_uv_notes(props, scan, me):
+    """Notes name only the maps this press carries - every map with Multiple
+    UV Channels, else the active one: a map left behind neither blocks nor
+    comes back on the LOD. Rewritten on a cache hit too, since the switch may
+    have moved since. Returns the unwrapped note."""
+    active = me.uv_layers.active
+    active_name = active.name if active is not None else None
+    carried = ({l.name for l in me.uv_layers} if props.use_multi_uv
+               else {active_name})
+    found = [(n, d) for n, d in scan.get("uv_found", ()) if n in carried]
+    blocking = [n for n, d in found if not d]
+    props.blocking_uv_note = ", ".join(blocking)
+    props.blocking_uv_lever = ("multi_uv" if blocking and props.use_multi_uv
+                               and active_name not in blocking else "")
+    props.unwrapped_uv_note = ", ".join(n for n, d in found if d)
+    return props.unwrapped_uv_note
 
 
 def source_scan(props, base, lod0):
     """The scan for this source, computed once and reused until its geometry
-    changes. Writes the panel's notes either way."""
+    changes. Writes the panel's notes either way. Runs on lod0 evaluated, the
+    way every level reads it: a modifier that moves vertices or writes UVs
+    changes what the scans find."""
+    eval_obj, me = mesh_ops.get_evaluated_mesh(bpy.context, lod0)
+    try:
+        scan = _source_scan(props, base, lod0, me)
+    finally:
+        eval_obj.to_mesh_clear()
+    # A level evaluating this same object reads the same mesh and skips its
+    # own fingerprint (simplify_object). Rewritten every press, a cached entry
+    # included.
+    scan["evaluated_as"] = lod0.name
+    return scan
+
+
+def _source_scan(props, base, lod0, me):
     scan = _SOURCE_SCANS.get(lod0.name)
-    fresh = new_source_scan(props, lod0)
+    fresh = new_source_scan(lod0, me)
     # "checked" is in the key: turning a check back on must rescan, or the
     # entry stored while it was off would answer for it.
     if scan is not None and all(
             scan.get(k) == fresh[k]
-            for k in ("tris", "loops", "uv_names", "mesh", "checked")):
+            for k in ("fingerprint", "mesh", "checked")):
         props.coincident_for = base
         props.coincident_note = scan["coincident_note"]
-        props.unwrapped_uv_note = scan["unwrapped_note"]
-        props.blocking_uv_note = scan.get("blocking_note", "")
+        scan["unwrapped_note"] = _publish_uv_notes(props, scan, me)
         return scan
     scan = fresh
     if scan["checked"][0]:
-        scan["coincident_note"] = scan_coincident(props, base, lod0, scan)
+        scan["coincident_note"] = scan_coincident(props, base, lod0, me, scan)
     else:
         props.coincident_for = base
         props.coincident_note = ""
     if scan["checked"][1]:
-        scan["unwrapped_note"] = scan_unwrapped_uv(props, base, lod0, scan)
-    else:
-        props.unwrapped_uv_note = ""
-        props.blocking_uv_note = ""
+        scan_unwrapped_uv(props, base, lod0, me, scan)
+    scan["unwrapped_note"] = _publish_uv_notes(props, scan, me)
     _SOURCE_SCANS[lod0.name] = scan
     while len(_SOURCE_SCANS) > _SOURCE_SCANS_MAX:
         del _SOURCE_SCANS[next(iter(_SOURCE_SCANS))]
@@ -1621,13 +1807,24 @@ def optimize_lod0(props, lod0):
 # passes through untranslated.
 REPORT_PHRASES = {
     "gone": "No triangles left for these materials:",
-    "mask_group": "The importance mask found no vertex group:",
+    "mask_group": "The importance mask was not applied: its vertex group is "
+                  "missing or empty.",
     "uv_dropped": "Extra UV maps were dropped. Turn on Multiple UV "
                   "Channels to keep them.",
+    "normals_failed": "Source normals could not be written: this LOD is "
+                      "fully smooth.",
+    "decimate_failed": "Finish with Decimate failed - see System Console.",
+    "normals_post_failed": "Normals were not recalculated - see System Console.",
 }
 
+# Light's lever for a smooth LOD is Recalculate + Smooth, which only the Very
+# Aggressive Modes offer - so outside them the hint has to name the Mode too.
+NORMALS_FAILED_HINT = "Turn on Recalculate + Smooth below to shade it."
+NORMALS_FAILED_HINT_MODE = ("To shade it, pick a Very Aggressive Mode and turn "
+                            "on Recalculate + Smooth.")
 
-def report_lines(report):
+
+def report_lines(report, slot=None):
     """One level's losses, as lines. A phrase carries no names or numbers, so
     it is a single translation key; anything variable follows it on its own
     indented line and is drawn untranslated.
@@ -1641,9 +1838,61 @@ def report_lines(report):
         if phrase is None:
             continue
         out.append(phrase)
-        if code in ("gone", "mask_group"):
+        if code in ("gone", "mask_group") and detail:
             out.append("   %s" % detail)
+        elif code == "normals_failed":
+            out.append(NORMALS_FAILED_HINT
+                       if slot is None or slot.simplify_mode in SMOOTH_NORMALS_MODES
+                       else NORMALS_FAILED_HINT_MODE)
     return out
+
+
+# Shape loss against the buffer the simplifier was handed (mesh_ops.shape_loss),
+# Pro's thresholds. Volume catches a surface caving in between its extreme
+# points, which the bounding box cannot see: swept over Pro's test models at
+# 50/25/10/5%, clean levels read at most 1.8%, the aircraft hull's broken
+# level 43.5%. The box is all a shell too thin for a volume has; clean tops
+# out at 1.9% and a collapsed car level is 3.4%, so it is the one to raise
+# first if the notice turns out noisy.
+SHAPE_VOLUME_LOSS = 0.08
+SHAPE_AXIS_LOSS = 0.03
+
+
+def shape_lines(shape, slot):
+    """The collapse cost the shape, not only the count. Diagnostic only - no
+    switch reads it. Needs slot.result_status set: asking for more triangles
+    is no advice on a level that never got the triangles it asked for."""
+    if not shape:
+        return []
+    vol = shape.get("volume")
+    axis = shape.get("axis") or 0.0
+    # Two error bars clear of the limit: an open boundary that moved makes the
+    # volume less precise, and a coarse reading has to beat its own noise.
+    unc = shape.get("uncertainty") or 0.0
+    hit_vol = vol is not None and vol - 2.0 * unc >= SHAPE_VOLUME_LOSS
+    hit_axis = axis >= SHAPE_AXIS_LOSS
+    if not (hit_vol or hit_axis):
+        return []
+    lines = ["The silhouette collapsed: this level lost part of the model's volume."
+             if hit_vol else
+             "The silhouette collapsed: this level is visibly smaller than the source."]
+    # Each number only when it is what tripped: a clean level still moves the
+    # box a percent or so, and a volume inside its own error bars is noise -
+    # either one printed next to a real finding reads as a second one.
+    nums = []
+    if hit_vol:
+        nums.append("volume -%.0f%%" % (100.0 * vol))
+    if hit_axis:
+        nums.append("size -%.0f%%" % (100.0 * axis))
+    if nums:
+        lines.append("   " + ", ".join(nums))
+    # Permissive trades shape for the count, and in Light the way off it is a
+    # Mode without it.
+    if slot.use_permissive:
+        lines.append("Try the Standard Mode to keep the shape.")
+    elif slot.result_status != 'HIGH':
+        lines.append("Ask for more triangles at this level.")
+    return lines
 
 
 # Above this share of the request the level did not reach its target; below
@@ -1688,7 +1937,6 @@ def _diagnose_result(slot, props, base, requested, achieved, result_error, repor
     slot.result_reason = ""
     slot.result_hint = ""
     slot.result_detail = ""
-    slot.result_notes = "\n".join(report_lines(report))
 
     ratio = (achieved / float(requested)) if requested else 1.0
     if ratio > RESULT_HIGH:
@@ -1697,6 +1945,10 @@ def _diagnose_result(slot, props, base, requested, achieved, result_error, repor
         slot.result_status = 'LOW'
     else:
         slot.result_status = 'OK'
+    # After the status: the shape lines pick their advice by it.
+    slot.result_notes = "\n".join(
+        report_lines(report, slot)
+        + shape_lines((report or {}).get("shape"), slot))
 
     ladder = MODE_LADDER.get(slot.simplify_mode, MODE_LADDER['VERY_AGGRESSIVE_ALT'])
 
@@ -1852,6 +2104,19 @@ def clear_lod_result(slot):
     slot.result_notes = ""
 
 
+def _mark_failed(slot, base):
+    """A level that did not build says so. The old object was removed before
+    the attempt, so the last run's numbers describe a mesh that is gone."""
+    clear_lod_result(slot)
+    slot.result_for = base
+    slot.result_requested = 0
+    slot.result_tris = 0
+    slot.result_status = 'FAILED'
+    slot.result_level = 'ERROR'
+    slot.result_reason = "This level was not built."
+    slot.result_hint = "Details are in the System Console."
+
+
 def draw_lod_result(box, slot, base):
     """The result block under one level. Only a miss upwards is drawn, and only
     in red: hitting the target needs no row, and coming in under it is not a
@@ -1868,9 +2133,14 @@ def draw_lod_result(box, slot, base):
     icon = 'ERROR' if slot.result_level == 'ERROR' else 'INFO'
     # The figures on a line of their own: the sentences below carry no
     # numbers so they can be translated, so this is the only place the count
-    # is stated.
-    res.label(text="%d -> %d tris" % (slot.result_requested, slot.result_tris),
-              icon=icon, translate=False)
+    # is stated. The line is the fold toggle - drawn as the property so the
+    # whole row is the hit area, emboss off so it keeps the label's look, the
+    # same icon and the same red.
+    res.prop(slot, "show_result", emboss=False, icon=icon,
+             text=("LOD not built" if slot.result_status == 'FAILED' else
+                   "%d -> %d tris" % (slot.result_requested, slot.result_tris)))
+    if not slot.show_result:
+        return
     # Flush left, no icon column: indenting under the icon costs a quarter
     # of the sidebar.
     if slot.result_reason:
@@ -1897,6 +2167,13 @@ def generate_one_lod(context, lod0, base, i, slot, props, scan=None):
     each LOD's aggressiveness comes from its Mode preset and percentage."""
     name = lod_name(base, i)
     existing = bpy.data.objects.get(name)
+    if existing is not None and existing is lod0:
+        # Replacing this level would delete what it is built from. Fails the
+        # level the way a simplify error does, and the object stays.
+        print(f"[LOD Generator] LOD {i} failed: {name} is the source of this "
+              f"generation, not replaced")
+        _mark_failed(slot, base)
+        return None, 0, 0, 0.0
     if existing is not None:
         # This takes the name off a placeholder too, which is the point: the
         # real level has to get the exact name, because a ".001" suffix makes
@@ -1948,15 +2225,15 @@ def generate_one_lod(context, lod0, base, i, slot, props, scan=None):
             drop_duplicates=(get_pref('check_duplicate_faces', True)
                              and get_pref('remove_duplicate_faces', True)),
             gpu_order=props.gpu_optimize,
+            check_shape=get_pref('check_silhouette', True),
             source_scan=scan,
             # preprune_budget / retarget_steps are left at their defaults (no
             # cap, no retry): the Limit Prune switch that drove them is Pro-only.
         )
     except Exception as exc:
         print(f"[LOD Generator] LOD {i} failed: {exc}")
-        # The old object was removed before this ran, so its report describes
-        # a mesh that no longer exists.
-        clear_lod_result(slot)
+        traceback.print_exc()
+        _mark_failed(slot, base)
         return None, 0, 0, 0.0
     # Achieved simplification error (normalized to source extents), stored on
     # the object so downstream LOD-switching logic can read one value off it.
@@ -1984,15 +2261,27 @@ class LODGENLIGHT_OT_generate(bpy.types.Operator):
                 and context.active_object.type == 'MESH')
 
     def execute(self, context):
+        self._editing = None
+        try:
+            return self._run(context)
+        except Exception:
+            return stopped_midway(self, context)
+
+    def _run(self, context):
         _lineup_restore(context)
         # Leaving Edit Mode is mandatory, not cosmetic: regeneration removes
         # the old object, and removing one still in Edit Mode leaks its edit
         # mesh. Restored on every exit path, so a failed generation doesn't
         # silently drop the user out of Edit Mode either.
         editing = suspend_edit_mode(context)
+        self._editing = editing
         props = context.scene.lodgen_light_props
+        _RENAME_NOTES.clear()
         base, lod0 = resolve_lod0(context.active_object)
+        # Before anything can cancel: the rename has already happened.
+        _publish_rename_note(props, base)
         editing = retarget_edit_name(editing, lod0)
+        self._editing = editing
         optimize_lod0(props, lod0)
         scan = source_scan(props, base, lod0)
         created = []
@@ -2049,11 +2338,22 @@ class LODGENLIGHT_OT_generate_single(bpy.types.Operator):
                 and context.active_object.type == 'MESH')
 
     def execute(self, context):
+        self._editing = None
+        try:
+            return self._run(context)
+        except Exception:
+            return stopped_midway(self, context)
+
+    def _run(self, context):
         _lineup_restore(context)
         editing = suspend_edit_mode(context)   # see LODGENLIGHT_OT_generate
+        self._editing = editing
         props = context.scene.lodgen_light_props
+        _RENAME_NOTES.clear()
         base, lod0 = resolve_lod0(context.active_object)
+        _publish_rename_note(props, base)
         editing = retarget_edit_name(editing, lod0)
+        self._editing = editing
         optimize_lod0(props, lod0)
         scan = source_scan(props, base, lod0)
         slot = getattr(props, f"lod_{self.lod_index}")
@@ -2068,6 +2368,90 @@ class LODGENLIGHT_OT_generate_single(bpy.types.Operator):
         context.view_layer.objects.active = obj
         self.report({'INFO'}, f"{obj.name}: {before} -> {after} tris, error {err:.4f}")
         resume_edit_mode(context, editing)
+        return {'FINISHED'}
+
+
+def gpu_order_target(context, base, family=None):
+    """The object the lod_0 row names: the family's zero level, or the active
+    mesh that is about to become it. Never resolve_lod0 - this path must not
+    rename or copy anything."""
+    lod0 = (family if family is not None else find_lod_family(base)).get(0)
+    if lod0 is not None:
+        return lod0
+    obj = context.active_object
+    return obj if obj is not None and obj.type == 'MESH' else None
+
+
+def draw_gpu_done(row, obj):
+    """Greyed tick on a mesh this add-on put into GPU order. A fact about the
+    mesh, so no switch gates it: a mesh never optimized carries no mark and
+    draws nothing. An ID property and two counts - fine in draw()."""
+    if obj is None or obj.type != 'MESH' or not mesh_ops.is_gpu_ordered(obj.data):
+        return False
+    done = row.row()
+    done.enabled = False
+    done.label(text="", icon='CHECKMARK')
+    return True
+
+
+def can_optimize_lod0(context, lod0):
+    """The Optimize gate, shared by the button and the operator's poll: the
+    button alone would leave F3 free to reorder the user's original under
+    "Keep the original object"."""
+    props = context.scene.lodgen_light_props
+    return (props.gpu_optimize and not get_pref('keep_original', False)
+            and native_build.has_gpu_optimize()
+            and lod0 is not None and lod0.type == 'MESH')
+
+
+def draw_gpu_order_state(row, context, base, family):
+    """Optimize for GPU reaches lod_0 only through a generation, so a source
+    nobody is regenerating has no way there. No button with the switch off (a
+    question nobody asked), and none under "Keep the original object" - the
+    level to reorder there is the copy, which Generate has not made yet."""
+    lod0 = gpu_order_target(context, base, family)
+    if draw_gpu_done(row, lod0):
+        return
+    if not can_optimize_lod0(context, lod0):
+        return
+    row.operator("lodgenlight.optimize_lod0", text="Optimize", icon='SORTSIZE')
+
+
+def _optimize_target(context, obj):
+    m = match_lod_name(obj.name)
+    return gpu_order_target(context, m.group(1) if m else obj.name)
+
+
+class LODGENLIGHT_OT_optimize_lod0(bpy.types.Operator):
+    bl_idname = "lodgenlight.optimize_lod0"
+    bl_label = "Optimize"
+    bl_description = ("Put lod_0 into GPU vertex order now, without generating "
+                      "LODs. The button clears once the level is in order")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        if not native_available() or obj is None or obj.type != 'MESH':
+            return False
+        return can_optimize_lod0(context, _optimize_target(context, obj))
+
+    def execute(self, context):
+        lod0 = _optimize_target(context, context.active_object)
+        if lod0 is None:
+            self.report({'ERROR'}, "No lod_0 to optimize.")
+            return {'CANCELLED'}
+        try:
+            reordered = mesh_ops.reorder_object_for_gpu(lod0)
+        except Exception as exc:
+            print(f"[LOD Generator] GPU order optimization failed on "
+                  f"{lod0.name}: {exc}")
+            self.report({'ERROR'}, f"{lod0.name}: GPU order failed - see System Console.")
+            return {'CANCELLED'}
+        if reordered:
+            self.report({'INFO'}, f"{lod0.name} reordered for GPU")
+        else:
+            self.report({'INFO'}, f"{lod0.name} is already in GPU order")
         return {'FINISHED'}
 
 
@@ -2233,10 +2617,13 @@ def _store_update_result(data):
     prefs.last_update_check = str(int(time.time()))
     if not isinstance(data, dict):
         return
-    version = str(data.get("version", ""))[:32]
-    prefs.latest_version = version if update_check.parse_version(version) else ""
+    # Drawn and linked from the add-on's own UI, so only what parses: the
+    # number re-written from its parts (no trailing text), and a link that
+    # stays on the product site - anything else opens the site's front page.
+    parsed = update_check.parse_version(str(data.get("version", ""))[:32])
+    prefs.latest_version = ".".join(str(n) for n in parsed) if parsed else ""
     url = str(data.get("url", ""))[:400]
-    prefs.latest_url = url if url.startswith("https://") else URL_WEBSITE
+    prefs.latest_url = url if update_check.is_site_url(url) else URL_WEBSITE
 
 
 def run_update_check(force=False):
@@ -2310,6 +2697,7 @@ PRO_DETAIL_ROWS = (
     (0, (), (("target_error", {}),)),
     (0, (), (("preprune_threshold", {"slider": True}),)),
     (0, (), (("lock_border", {}),)),
+    (0, (), (("dilate_borders", {}),)),
     (0, (), (("use_prune", {}),)),
     # Pro shows it whenever either prune bites: "use_prune or preprune > 0".
     # In every Light Mode the two coincide, so one gate is enough - verify_all
@@ -2438,6 +2826,11 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
             warn.label(text=props.blocking_uv_note)
             warn.label(text="Every face is its own island, which locks")
             warn.label(text="the mesh. Left as is - it holds real data.")
+            # A lever only while it is unspent: the switch read now, not at
+            # generation time. Useless when the active map is itself blocking.
+            if props.blocking_uv_lever == "multi_uv" and props.use_multi_uv:
+                warn.label(text="Turn off Multiple UV Channels to keep")
+                warn.label(text="only the active map.")
 
         if props.unwrapped_uv_note and props.coincident_for == base:
             warn = layout.box()
@@ -2488,7 +2881,13 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
         preview_row.operator("lodgenlight.lineup", text="", icon='MOD_ARRAY',
                              depress=props.lineup_active)
 
-        layout.label(text=lod0_name, icon='MESH_DATA')
+        # Scanned here rather than below: the lod_0 row reads it too, and
+        # find_lod_family walks every object in the file on each redraw.
+        family0 = find_lod_family(base)
+        lod0_obj = family0.get(0)
+        lod0_row = layout.row(align=True)
+        lod0_row.label(text=lod0_name, icon='MESH_DATA')
+        draw_gpu_order_state(lod0_row, context, base, family0)
         # Repeated from Preferences on purpose: it decides what happens to the
         # object the user is looking at, so it belongs next to its name.
         prefs = addon_prefs()
@@ -2496,8 +2895,6 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
             layout.prop(prefs, "keep_original")
         row = layout.row(align=True)
         row.scale_y = 1.5
-        family0 = find_lod_family(base)
-        lod0_obj = family0.get(0)
         lod0_isolated = (lod0_obj is not None and not lod0_obj.hide_get() and
                           all(o.hide_get() for idx, o in family0.items() if idx != 0))
         op = row.operator("lodgenlight.isolate", text="Only This LOD", icon='HIDE_OFF',
@@ -2519,6 +2916,7 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
             box = layout.box()
             header = box.row(align=True)
             header.label(text=lod_name(base, i))
+            draw_gpu_done(header, family.get(i))
             # Three things that do not work here, each tried: expand=True sizes
             # buttons by content, so an icon-only one comes out narrowest and
             # cannot be widened; prop_enum allows per-item widths but silently
@@ -2620,6 +3018,15 @@ class VIEW3D_PT_lod_generator(bpy.types.Panel):
         run.scale_y = 1.8
         run.operator("lodgenlight.generate", icon='MOD_DECIM')
 
+        # The family is not named after the object, or the object itself was
+        # moved aside - unsaid, that reads as the add-on working on a stranger.
+        if _rename_owns(props, base):
+            box = layout.box()
+            _draw_wrapped(box, "Renamed to avoid a name clash:", 'ERROR',
+                          BOX_MARGIN)
+            for line in props.rename_note.splitlines():
+                box.label(text=line, translate=False, icon='BLANK1')
+
         # The one thing the hierarchy mirror cannot fix, so it is reported
         # rather than hidden: an empty stands in for the missing level, and
         # this row disappears by itself once that parent is simplified.
@@ -2659,6 +3066,7 @@ classes = (
     LODGENLIGHT_OT_check_updates,
     LODGENLIGHT_OT_generate,
     LODGENLIGHT_OT_generate_single,
+    LODGENLIGHT_OT_optimize_lod0,
     LODGENLIGHT_OT_lineup,
     LODGENLIGHT_OT_isolate,
     LODGENLIGHT_OT_show_all,
@@ -2696,25 +3104,30 @@ def register():
 
 
 def unregister():
-    for _menu in reversed(MODE_MENUS):
-        try:
-            bpy.utils.unregister_class(_menu)
-        except Exception:
-            pass
-    update_check.cancel()
-    if bpy.app.timers.is_registered(_deferred_update_check):
-        bpy.app.timers.unregister(_deferred_update_check)
-    for handlers in (bpy.app.handlers.load_post, bpy.app.handlers.undo_post,
-                     bpy.app.handlers.redo_post):
-        if _drop_all_scans in handlers:
-            handlers.remove(_drop_all_scans)
-    if _drop_stale_scans in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(_drop_stale_scans)
-    _SOURCE_SCANS.clear()
-    bpy.app.translations.unregister(__name__)
-    del bpy.types.Scene.lodgen_light_props
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    try:
+        for _menu in reversed(MODE_MENUS):
+            try:
+                bpy.utils.unregister_class(_menu)
+            except Exception:
+                pass
+        update_check.cancel()
+        if bpy.app.timers.is_registered(_deferred_update_check):
+            bpy.app.timers.unregister(_deferred_update_check)
+        for handlers in (bpy.app.handlers.load_post, bpy.app.handlers.undo_post,
+                         bpy.app.handlers.redo_post):
+            if _drop_all_scans in handlers:
+                handlers.remove(_drop_all_scans)
+        if _drop_stale_scans in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.remove(_drop_stale_scans)
+        _SOURCE_SCANS.clear()
+        bpy.app.translations.unregister(__name__)
+        del bpy.types.Scene.lodgen_light_props
+        for cls in reversed(classes):
+            bpy.utils.unregister_class(cls)
+    finally:
+        # Even after a failed step above: Blender deletes the folder next, and
+        # a DLL still loaded leaves it half removed until a restart.
+        native_build.unload_native()
 
 
 if __name__ == "__main__":

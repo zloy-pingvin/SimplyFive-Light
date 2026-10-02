@@ -34,7 +34,6 @@ TRANSLATIONS_RU = {
     "Batch Queue": "Пакетная очередь",
     "Queue several objects and generate them in one run":
         "Поставить в очередь несколько объектов и обработать их одним прогоном",
-    "Available in SimplyFive Pro": "Доступно в SimplyFive Pro",
     "Add Selected to Queue": "Добавить выделенное в очередь",
     "Apply Settings to Selected": "Применить настройки к выделенным",
     "Generate All Tasks": "Обработать все задачи",
@@ -65,7 +64,43 @@ TRANSLATIONS_RU = {
     "Shape keys are not carried": "Шейпкеи не переносятся",
     "The LOD is baked at the current mix.": "LOD запекается с текущей смесью.",
     "No triangles left for these materials:": "Не осталось треугольников у материалов:",
-    "The importance mask found no vertex group:": "Маска важности не нашла вертексную группу:",
+    "The importance mask was not applied: its vertex group is missing or empty.":
+        "Маска важности не сработала: её вертексной группы нет или она пустая.",
+    "Source normals could not be written: this LOD is fully smooth.":
+        "Нормали исходника не записались: LOD полностью гладкий.",
+    "Turn on Recalculate + Smooth below to shade it.":
+        "Чтобы вернуть острые рёбра, включите ниже «Пересчитать + сгладить».",
+    "To shade it, pick a Very Aggressive Mode and turn on Recalculate + Smooth.":
+        "Чтобы вернуть острые рёбра, выберите режим Very Aggressive и включите «Пересчитать + сгладить».",
+    "The silhouette collapsed: this level lost part of the model's volume.":
+        "Силуэт схлопнулся: уровень потерял часть объёма модели.",
+    "The silhouette collapsed: this level is visibly smaller than the source.":
+        "Силуэт схлопнулся: уровень заметно меньше исходника.",
+    "Try the Standard Mode to keep the shape.":
+        "Попробуйте режим Standard, чтобы сохранить форму.",
+    "Ask for more triangles at this level.":
+        "Задайте на этом уровне больше треугольников.",
+    "LOD not built": "LOD не построен",
+    "This level was not built.":
+        "Этот уровень не построен.",
+    "Details are in the System Console.":
+        "Подробности - в системной консоли.",
+    "Generation stopped part way - see System Console. Ctrl+Z undoes what it did.":
+        "Генерация остановилась на полпути - подробности в системной консоли. Ctrl+Z отменит сделанное.",
+    "Result": "Результат",
+    "Show why this level came out the way it did. Collapsed, the count line stays":
+        "Показывать, почему уровень получился таким. В свёрнутом виде остаётся строка со счётом",
+    "Renamed to avoid a name clash:":
+        "Переименовано из-за совпадения имён:",
+    "Optimize": "Оптимизировать",
+    "Put lod_0 into GPU vertex order now, without generating LODs. The button clears once the level is in order":
+        "Переставить вершины lod_0 под видеокарту сейчас, без генерации LOD. Кнопка пропадёт, когда уровень будет готов",
+    "No lod_0 to optimize.": "Нет lod_0 для оптимизации.",
+    "Turn off Multiple UV Channels to keep": "Выключите «Несколько UV-каналов»,",
+    "only the active map.": "останется только активная карта.",
+    "Dilate Borders": "Расширять края",
+    "Push open edges outward to give back the area of removed leaves and cards. For foliage only. Turns off Lock Open Edges":
+        "Выталкивает открытые края наружу, возвращая площадь удалённых листьев и карточек. Только для листвы. Выключает Lock Open Edges",
     "Extra UV maps were dropped. Turn on Multiple UV Channels to keep them.":
         "Лишние UV-карты выброшены. Включите «Несколько UV-каналов», чтобы их сохранить.",
     "Generated objects are named <object><suffix><N>. Your object keeps its name; <object><suffix>0 is a copy of it, and it is hidden.":
@@ -185,8 +220,8 @@ TRANSLATIONS_RU = {
     "Reinstall the add-on to restore the bundled library.":
         "Переустановите аддон, чтобы восстановить встроенную библиотеку.",
     "Importance Mask": "Маска важности",
-    "Carry every UV channel onto the LODs, keeping names and active/render flags. All of them enter the error metric with the same UV Weight, so extra seams constrain simplification. Off = only the active channel is copied":
-        "Переносит на LOD все UV-каналы, сохраняя имена и флаги active/render. Все они входят в метрику ошибки с тем же UV Weight, поэтому лишние швы ограничивают упрощение. Выкл = копируется только активный канал",
+    "Carry every UV map onto the LODs, with names and active/render flags. Seams of every map constrain simplification; a map that blocks it is named in the panel. Off: only the active map":
+        "Переносит на LOD все UV-карты, с именами и флагами active/render. Швы каждой карты ограничивают упрощение; карта, которая его блокирует, названа в панели. Выкл: только активная карта",
     "Weld coincident vertices on the result (Blender's Merge by Distance). UVs and normals are stored per face-corner, so welding does not blend them":
         "Сваривает совпадающие вершины результата (штатный Merge by Distance Blender). UV и нормали хранятся по углу грани, поэтому сварка их не смешивает",
     "Simulates distance: 0 = lod_0 (closest), higher = further LODs. Same effect as the 'Only This LOD' buttons":
@@ -204,6 +239,13 @@ TRANSLATIONS_RU = {
     "Check Duplicate Surfaces": "Проверять дублирующие поверхности",
     "Look for faces lying exactly on top of other faces (a surface duplicated for a second material). Both copies become unmovable and take their neighbours with them. One pass over the mesh per source, cached":
         "Искать грани, лежащие точно на других гранях (поверхность, задублированная под второй материал). Обе копии становятся неподвижными и тянут за собой соседей. Один проход по мешу на источник, кэшируется",
+    "Finish with Decimate failed - see System Console.":
+        "Finish with Decimate не сработал - смотрите System Console.",
+    "Normals were not recalculated - see System Console.":
+        "Нормали не пересчитаны - смотрите System Console.",
+    "Check Silhouette": "Проверять силуэт",
+    "Compare each level's volume and size with the source and warn in the panel when the shape collapsed. A message only, the LOD is not changed. Off skips the measurement":
+        "Сравнивать объём и габарит каждого уровня с исходником и предупреждать в панели, если силуэт схлопнулся. Только сообщение, LOD не меняется. Выключено - не меряет",
     "Drop Duplicate Surfaces": "Отбрасывать дублирующие поверхности",
     "Keep one copy of each duplicated face when simplifying. The dropped copy takes its material with it, so a material used only by that copy disappears from the LOD - the panel says which":
         "Оставлять одну копию каждой задублированной грани. Отброшенная копия уносит свой материал, поэтому материал, которым пользовалась только она, из LOD исчезнет — панель скажет, какой",
@@ -264,8 +306,8 @@ TRANSLATIONS_RU = {
         "Вес UV-координат в метрике ошибки. 0 = текстура может растягиваться свободно. UV лежат в 0-1, а позиции — в единицах сцены, поэтому крупным моделям нужны значения выше 1 (meshoptimizer советует 10-100)",
     "Weight of surface normals in the error metric. 0 = shading may distort freely. meshoptimizer suggests around 1.0":
         "Вес нормалей поверхности в метрике ошибки. 0 = затенение может искажаться свободно. meshoptimizer советует около 1.0",
-    "meshopt_SimplifyPermissive: allows collapsing across UV/normal seams while the error stays acceptable. Lower triangle count for some UV distortion. Experimental upstream":
-        "meshopt_SimplifyPermissive: разрешает схлопывание через швы UV и нормалей, пока ошибка приемлема. Меньше треугольников ценой искажения UV. Экспериментально в самой библиотеке",
+    "meshopt_SimplifyPermissive: allows collapsing across UV/normal seams while the error stays acceptable. Lower triangle count for some UV distortion":
+        "meshopt_SimplifyPermissive: разрешает схлопывание через швы UV и нормалей, пока ошибка приемлема. Меньше треугольников ценой искажения UV",
     "meshopt_SimplifyPrune: lets the simplifier discard cheap disconnected components instead of only collapsing edges. Helps when the LOD stops well above its target":
         "meshopt_SimplifyPrune: позволяет отбрасывать дешёвые отсоединённые компоненты, а не только схлопывать рёбра. Помогает, когда LOD останавливается заметно выше цели",
     "meshopt_SimplifyRegularize: full uniformity bias":
@@ -314,7 +356,9 @@ TRANSLATIONS_RU = {
 
 
 def _build_translations_dict():
+    # Operator button text is looked up in the "Operator" context, not "*".
     result = {}
     for source, translated in TRANSLATIONS_RU.items():
         result[("*", source)] = translated
+        result[("Operator", source)] = translated
     return {"ru_RU": result}
