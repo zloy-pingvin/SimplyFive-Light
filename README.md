@@ -1,137 +1,64 @@
-# SimplyFive Light — One-click LOD Generator for Blender
+# SimplyFive Light
 
-A Blender add-on that generates a set of LOD meshes (Levels of Detail) from
-the active object. For each mesh you can create up to 5 simplified versions,
-each with its own triangle percentage and quality mode — in one click.
+**Fewer triangles, ready-to-use LODs.** A free Blender add-on that creates up to five simplified versions of a mesh in one pass. Set a triangle budget for each level, choose how aggressively to simplify, and compare the results in the viewport.
 
-**Light** is the free version. It is fully self-contained and useful on its
-own; a separate **Pro** version adds fine-grained per-LOD control and extra
-transfer options (see *Pro version* below).
+[Download Light](https://github.com/zloy-pingvin/SimplyFive-Light/releases/latest) · [Website](https://zloy-pingvin.github.io/SimplyFive-Light/) · [Manual](https://zloy-pingvin.github.io/SimplyFive-Light/docs.html) · [Русский](README.ru.md)
 
-Author: zloy_pingvin
-Requires Blender: 4.2.0+ (verified on 4.2, 4.5.11 LTS, 5.0 and 5.2 LTS)
+![Original elephant mesh and five progressively simplified LODs, shown side by side in wireframe](media/01-lod-levels.png)
 
+## What it does
 
-## Features (Light)
+| Feature | What you get |
+| --- | --- |
+| Up to five LODs | Set each target as a percentage of the source or an absolute triangle count. |
+| Five quality modes | Choose from Careful through Very Aggressive, independently for each level. |
+| UVs, normals, and materials | Simplification takes surface attributes into account, with support for multiple UV maps and materials. |
+| Importance maps | Use vertex colors or a vertex group to keep more detail where it matters. |
+| Viewport comparison | Switch between levels with LOD Preview, or place them side by side with Line Up LODs. |
+| Result reports | See the actual triangle count and hints when a mesh cannot reach its target. |
 
-- Up to 5 LOD levels per object. Each level's target is set either as a
-  percentage of the source or as an absolute triangle count, the way platform
-  budgets are written.
-- 5 one-click quality modes per level: **Careful**, **Standard**,
-  **Aggressive**, **Very Aggressive** and **Very Aggressive Alternative** —
-  the farther the level, the more aggressive the mode. The two Very Aggressive
-  modes differ in one thing: the Alternative finishes with a Decimate pass to
-  reach the exact percentage, which suits some models and not others.
-- **Recalculate + Smooth** on the Very Aggressive modes: rebuilds normals from
-  the simplified geometry, since the source ones stop matching it at very low
-  triangle counts.
-- Attribute-aware simplification: keeps UVs and normals so seams and hard
-  edges survive.
-- Vertex colors carried onto the LODs, and optionally used as a per-vertex
-  **importance map** — paint the areas you want to keep detailed, from either a
-  color attribute or a vertex group. One global switch applied to every level.
-- **Source checks** (Preferences) that catch the two things which silently stop
-  simplification dead: a UV map that was never unwrapped, and a surface
-  duplicated to carry a second material. Both are reported before generating,
-  and both can be worked around automatically.
-- **Optimize for GPU**: reorders triangles and vertices the way the GPU reads
-  them, without changing the geometry.
-- Multiple UV channels: carry every UV channel onto the LODs, not just the
-  active one.
-- Multi-material support, including materials on linked duplicates/instances
-  or produced by Geometry Nodes.
-- Merge by Distance on the result to weld seams cleanly.
-- Configurable LOD name suffix (Preferences), default `_lod_`.
-- In-viewport LOD preview slider, plus a **Line Up LODs** review mode that
-  lays all levels out in a row for side-by-side comparison.
-- **Keep the original object**: generate from a copy instead of renaming —
-  your object keeps its name and is hidden, the copy becomes `lod_0`.
-- Parented assemblies keep their shape: every generated level is placed under
-  the same level of its parent, so a single level of an assembly can be
-  selected, hidden or exported on its own. A parent with no LODs of its own
-  gets an empty standing in for it, and the panel names those parents.
-- A **result block under each level** after generating: requested → produced
-  triangles, why the level missed, and one hint naming a lever this mesh
-  actually responds to. It also reports what was lost quietly — materials with
-  no triangles left in the LOD, an importance mask that found no vertex group,
-  extra UV maps dropped — and flags the case where the triangle count was hit
-  but a part that would not collapse ate the budget of the rest.
-- A notice before generating on a skinned mesh or one with shape keys: only
-  geometry is carried, so the LOD is baked in the current pose and key mix.
-- Optional once-a-day update check against the product site, off with one
-  switch — with it off the add-on never touches the network.
-- Russian UI translation.
+Light also carries vertex colors onto the result, preserves parent relationships between generated levels, and can reorder mesh data for GPU efficiency. The interface is available in English and Russian.
 
-## Pro version
+![SimplyFive and Decimate comparison showing normals on boot soles and UVs on a textured boot](media/showcase.png)
 
-<https://zloy-pingvin.github.io/SimplyFive-Light/>
+*A simplification example from the website. Results depend on the mesh and settings.*
 
-The Pro version keeps everything in Light and adds:
+## Install
 
-- Full per-level fine-tuning of every simplification parameter. Light shows the
-  same block greyed out, so you can see what each level is generated with.
-- Chained LODs — build each level from the previous one for cleaner far LODs.
-- Vertex color **hard-lock**: guarantee important areas are never simplified.
-- Per-level importance mask, so a near level can anchor a little of it and a
-  distant one all of it.
-- Recalculate normals + Auto Smooth by angle, and a Sharp Loops mode that
-  closes broken feature loops, for very low-poly levels.
-- **Accurate Vertex Colors**: blend colors along the collapse so a painted
-  gradient does not come out in steps.
-- **Protect Material Borders** as a switch of its own, separate from UV seams.
-- **Limit Prune**: stop pruning from deleting whole parts.
-- An extra topology-ignoring ultra-aggressive mode, a voxel remesh, and a
-  "regularize" pass for more uniform triangles.
-- **Batch queue**: every selected mesh becomes a task with its own settings,
-  its own level count and its own modes; *Apply Settings to Selected* sets up
-  symmetrical parts in one press, a preview slider switches the whole queue
-  between levels, and one button runs it.
-- **Transfer Vertex Groups**: the LOD arrives bound to the skeleton — the
-  armature binding is copied and each surviving vertex inherits the weights the
-  source really had.
-- **Transfer Shape Keys** onto the near levels, with a limit on how far they go.
-- Two extra presets: **Clear Simplify** (geometry only, for very far levels)
-  and **Scan** (photogrammetry).
-- Save and load full configurations as named presets, plus editable mode
-  presets.
+Requires **Blender 4.2 or newer**. The simplification library is bundled; no separate build is needed.
 
-## Installation
+1. Download the **SimplyFive Light ZIP** from [Releases](https://github.com/zloy-pingvin/SimplyFive-Light/releases/latest). Choose the add-on archive, not GitHub's source-code ZIP.
+2. In Blender, open **Edit → Preferences → Add-ons**.
+3. Open the menu at the top right, choose **Install from Disk…**, and select the ZIP.
+4. Enable **SimplyFive Light**.
 
-1. Blender → Edit → Preferences → Add-ons.
-2. Open the drop-down at the top right → "Install from Disk…" → select the
-   SimplyFive Light archive.
-3. Enable the checkbox next to "SimplyFive Light".
+## Make your first LODs
 
-The simplification library is already bundled — no extra build step is
-required.
+1. Select a mesh in the viewport.
+2. Press **N** to open the sidebar, then choose the **LODS** tab.
+3. Set **Number of LODs**. Start with three levels.
+4. Give each level a target using **%** or **Tris**, then choose its quality mode. Try gentler modes for nearby LODs and more aggressive ones for distant LODs.
+5. Click **Generate LODs**.
 
-## Quick Start
+The source becomes `name_lod_0`; the simplified objects are named `name_lod_1`, `name_lod_2`, and so on. Enable **Keep the original object** to generate from a copy instead: the original keeps its name and is hidden. The `_lod_` suffix is configurable in Preferences.
 
-1. Select a mesh object in the viewport.
-2. Open the sidebar (N) → "LODS" tab.
-3. Set "Number of LODs" (3–4 is usually enough).
-4. For each level, choose a mode (Careful / Standard / Aggressive / Very
-   Aggressive) — the farther the level is from "0", the more aggressive the
-   mode should be.
-5. Set the size of each level — the toggle in the level header picks the unit:
-   `%` of the source, or `Tris` for an absolute triangle count.
-6. Click "Generate LODs".
+Use **LOD Preview (distance)** to inspect individual levels, or **Line Up LODs** to compare them side by side. Check the result under each level before exporting.
 
-The source object is renamed to "name_lod_0", and "name_lod_1",
-"name_lod_2", etc. appear next to it — one per level (the `_lod_` suffix is
-configurable in Preferences; with "Keep the original object" on it is copied
-instead of renamed). The "LOD Preview (distance)" slider inspects
-each level individually, and the icon button next to it ("Line Up LODs")
-lays every generated level out in a row for side-by-side comparison.
+## Before you simplify
 
-Full documentation: <https://zloy-pingvin.github.io/SimplyFive-Light/docs.html>
+- A triangle target is a goal. Seams, protected details, and the selected mode can keep the result above it; the result report explains what happened.
+- Light generates geometry from the current pose and shape-key mix. It does not transfer the rig or shape keys to the LODs.
+- Source checks can flag UV and duplicate-surface problems before generation.
+- The optional daily update check can be disabled in Preferences.
 
-## License
+For settings and troubleshooting, see the [manual](https://zloy-pingvin.github.io/SimplyFive-Light/docs.html).
 
-SimplyFive Light is licensed under the **GNU General Public License v3.0 or
-later**. Full text — see the `LICENSE` file next to the add-on.
+## Need more control?
 
-The add-on uses the **meshoptimizer** library (by Arseny Kapoulkine,
-MIT License): https://github.com/zeux/meshoptimizer. The full meshoptimizer
-license text and usage notice — see the `THIRD-PARTY-NOTICES.txt` file next
-to the add-on.
+Light works on its own and is free. **SimplyFive Pro** adds detailed per-level settings, batch processing, chained LODs, and transfer options for vertex groups and shape keys. See the [website](https://zloy-pingvin.github.io/SimplyFive-Light/) for the full comparison.
+
+## Author and license
+
+By **zloy_pingvin**.
+
+SimplyFive Light is licensed under [GPL-3.0-or-later](LICENSE). It uses [meshoptimizer](https://github.com/zeux/meshoptimizer) by Arseny Kapoulkine, licensed under MIT; see [third-party notices](THIRD-PARTY-NOTICES.txt).
